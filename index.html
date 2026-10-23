@@ -1,0 +1,145 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Keningau AI Signal</title>
+    <style>
+        /* Rekaan UI ala-ala Aplikasi Trading (Dark Mode) */
+        body { 
+            background-color: #0d1117; 
+            color: #c9d1d9; 
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif; 
+            padding: 20px; 
+            display: flex; 
+            flex-direction: column; 
+            align-items: center;
+            margin: 0;
+            min-height: 100vh;
+        }
+        .container { width: 100%; max-width: 400px; margin-top: 20px;}
+        h2 { text-align: center; color: #58a6ff; margin-bottom: 5px; font-size: 24px;}
+        p.subtitle { text-align: center; color: #8b949e; font-size: 13px; margin-top: 0; margin-bottom: 25px;}
+        
+        button { 
+            width: 100%; padding: 15px; background: #238636; color: white; 
+            border: none; border-radius: 8px; font-size: 16px; font-weight: bold; cursor: pointer;
+            margin-bottom: 20px; transition: 0.2s;
+        }
+        button:active { background: #2ea043; transform: scale(0.98); }
+        
+        .card { 
+            background: #161b22; border: 1px solid #30363d; border-radius: 12px; 
+            padding: 20px; display: none; /* Sembunyi dulu */
+            box-shadow: 0 4px 6px rgba(0,0,0,0.3);
+        }
+        
+        .header { display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #30363d; padding-bottom: 10px; margin-bottom: 15px;}
+        .header h3 { margin: 0; font-size: 20px; }
+        
+        .badge { padding: 6px 14px; border-radius: 20px; font-size: 14px; font-weight: bold; }
+        .badge.buy { background: rgba(63, 185, 80, 0.15); color: #3fb950; }
+        .badge.sell { background: rgba(248, 81, 73, 0.15); color: #f85149; }
+        
+        .row { display: flex; justify-content: space-between; margin: 12px 0; font-size: 15px;}
+        .label { color: #8b949e; }
+        .val { font-weight: bold; font-family: monospace; font-size: 16px; }
+        
+        .tp-color { color: #3fb950; }
+        .sl-color { color: #f85149; }
+        
+        .reason { margin-top: 15px; padding: 12px; background: #0d1117; border-radius: 8px; font-style: italic; color: #8b949e; font-size: 13px; border-left: 3px solid #58a6ff;}
+        
+        #loading { display: none; text-align: center; color: #e3b341; font-weight: bold; margin-bottom: 20px;}
+    </style>
+</head>
+<body>
+
+    <div class="container">
+        <h2>Keningau AI</h2>
+        <p class="subtitle">Dikuasakan oleh TwelveData & DeepSeek AI</p>
+        
+        <button onclick="mintaSignal()">Jana Signal AI</button>
+        
+        <div id="loading">AI sedang menganalisis pasaran...</div>
+
+        <div class="card" id="signalCard">
+            <div class="header">
+                <h3 id="pair">XAU/USD</h3>
+                <span class="badge" id="action">...</span>
+            </div>
+            
+            <div class="row">
+                <span class="label">Entry Price</span>
+                <span class="val" id="entry">-</span>
+            </div>
+            <div class="row">
+                <span class="label">Take Profit (TP1)</span>
+                <span class="val tp-color" id="tp1">-</span>
+            </div>
+            <div class="row">
+                <span class="label">Stop Loss</span>
+                <span class="val sl-color" id="sl">-</span>
+            </div>
+            <div class="row" style="border-top: 1px dashed #30363d; padding-top: 12px;">
+                <span class="label">Confidence Score</span>
+                <span class="val" id="confidence">-</span>
+            </div>
+
+            <div class="reason">
+                " <span id="reason">-</span> "
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // ==============================================================
+        // PENTING: TUKAR URL DI BAWAH INI KEPADA URL RENDER BARU ANDA!
+        // Contoh: 'https://keningau-ai.onrender.com/api/generate-signal'
+        // ==============================================================
+        const API_URL = 'https://nama-projek-baru-anda.onrender.com/api/generate-signal'; 
+
+        async function mintaSignal() {
+            // Tunjuk loading
+            document.getElementById('loading').style.display = 'block';
+            document.getElementById('signalCard').style.display = 'none';
+
+            try {
+                // Panggil Backend Render
+                const response = await fetch(API_URL);
+                
+                // Jika server Render tengah tidur (free tier), ia akan ambil masa.
+                const data = await response.json();
+
+                if (data.error) throw new Error(data.error);
+
+                // Sembunyikan loading, tunjuk card
+                document.getElementById('loading').style.display = 'none';
+                document.getElementById('signalCard').style.display = 'block';
+
+                // Masukkan data AI ke dalam HTML
+                document.getElementById('pair').innerText = data.pair;
+                document.getElementById('entry').innerText = data.entry;
+                document.getElementById('tp1').innerText = data.tp1;
+                document.getElementById('sl').innerText = data.stop_loss;
+                document.getElementById('confidence').innerText = data.confidence + " / 100";
+                document.getElementById('reason').innerText = data.reason;
+
+                // Tukar warna badge (BUY = Hijau, SELL = Merah)
+                const actionBadge = document.getElementById('action');
+                actionBadge.innerText = data.action;
+                
+                if (data.action === "BUY") {
+                    actionBadge.className = "badge buy";
+                } else {
+                    actionBadge.className = "badge sell";
+                }
+
+            } catch (error) {
+                document.getElementById('loading').style.display = 'none';
+                alert("Ralat Sistem: " + error.message + "\n\nPastikan server Render anda sudah 'Live' dan URL API betul.");
+            }
+        }
+    </script>
+</body>
+</html>
