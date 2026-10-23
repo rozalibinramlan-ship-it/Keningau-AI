@@ -1,40 +1,46 @@
 const express = require('express');
-const axios = require('axios');
 const cors = require('cors');
+const { GoogleGenerativeAI } = require("@google/generative-ai");
 
 const app = express();
 app.use(cors());
 app.use(express.json());
 
-// 1. Ambil API Keys dari Environment Variables Render
+// =====================================================================
+// 1. MASUKKAN API KEYS ANDA DI SINI
+// (Jika anda guna Environment Variables di Render, biarkan 'process.env...')
+// =====================================================================
 const TD_KEYS = [
-    process.env.TWELVEDATA_API_KEY,
-    process.env.TWELVEDATA_API_KEY_2,
-    process.env.TWELVEDATA_API_KEY_3
-].filter(Boolean); // Buang jika ada yang kosong
+    process.env.TWELVEDATA_API_KEY || 'LETAK_TWELVEDATA_KEY_1_DISINI',
+    process.env.TWELVEDATA_API_KEY_2 || 'LETAK_TWELVEDATA_KEY_2_DISINI',
+    process.env.TWELVEDATA_API_KEY_3 || 'LETAK_TWELVEDATA_KEY_3_DISINI'
+];
 
-const DEEPSEEK_API_KEY = process.env.DEEPSEEK_API_KEY;
+const GEMINI_API_KEY = process.env.GEMINI_API_KEY || 'LETAK_GEMINI_API_KEY_DISINI';
 
-// 2. Fungsi ambil data dari TwelveData (Sistem Backup Key)
+// Setup Gemini AI
+const genAI = new GoogleGenerativeAI(GEMINI_API_KEY);
+
+// =====================================================================
+// 2. FUNGSI AMBIL DATA DARI TWELVEDATA
+// =====================================================================
 async function getMarketData(symbol) {
     for (let i = 0; i < TD_KEYS.length; i++) {
-        try {
-            const response = await axios.get(`https://api.twelvedata.com/time_series`, {
-                params: {
-                    symbol: symbol, 
-                    interval: '1h',
-                    outputsize: 5, // Ambil 5 harga terakhir
-                    apikey: TD_KEYS[i]
-                }
-            });
+        // Langkau jika key kosong
+        if (!TD_KEYS[i] || TD_KEYS[i].includes('LETAK_')) continue;
 
-            if (response.data.status !== "error" && response.data.values) {
+        try {
+            const url = `https://api.twelvedata.com/time_series?symbol=${symbol}&interval=1h&outputsize=5&apikey=${TD_KEYS[i]}`;
+            const response = await fetch(url);
+            const data = await response.json();
+
+            if (data.status !== "error" && data.values) {
                 return {
-                    latestPrice: response.data.values[0].close,
-                    history: response.data.values.map(v => v.close)
+                    latestPrice: data.values[0].close,
+                    history: data.values.map(v => v.close)
                 };
             } else {
-                console.log(`API Key ${i+1} gagal: ${response.data.message}`);
+                console.log(`API Key ${i+1} gagal: ${data.message}`);
             }
         } catch (err) {
             console.log(`API Key ${i+1} error. Cuba key seterusnya...`);
@@ -43,15 +49,17 @@ async function getMarketData(symbol) {
     throw new Error("Semua TwelveData API Key dah limit atau gagal.");
 }
 
-// 3. Endpoint untuk dipanggil oleh HTML
+// =====================================================================
+// 3. ENDPOINT UNTUK DIPANGGIL OLEH HTML
+// =====================================================================
 app.get('/api/generate-signal', async (req, res) => {
     try {
-        const pair = "XAU/USD"; // Anda boleh tukar ke EUR/USD, GBP/USD, dll.
+        const pair = "XAU/USD"; // Anda boleh tukar pair di sini
 
         // Ambil Data Pasaran
         const marketData = await getMarketData(pair);
 
-        // Sediakan Prompt untuk DeepSeek
+        // Sediakan Prompt untuk Gemini
         const prompt = `
             Anda adalah pakar analisis teknikal Forex.
             Pair: ${pair}
@@ -70,29 +78,28 @@ app.get('/api/generate-signal', async (req, res) => {
             }
         `;
 
-        // Hantar ke DeepSeek API
-        const aiResponse = await axios.post('https://api.deepseek.com/v1/chat/completions', {
-            model: "deepseek-chat",
-            messages: [{ role: "user", content: prompt }],
-            response_format: { type: "json_object" },
-            temperature: 0.3 // Rendah supaya AI tak merepek
-        }, {
-            headers: { 
-                'Authorization': `Bearer ${DEEPSEEK_API_KEY}`,
-                'Content-Type': 'application/json'
-            }
+        // Panggil Gemini (Guna model gemini-1.5-flash)
+        const model = genAI.getGenerativeModel({ 
+            model: "gemini-1.5-flash",
+            generationConfig: { responseMimeType: "application/json" } // Paksa bagi format JSON
         });
 
+        const result = await model.generateContent(prompt);
+        const response = await result.response;
+        const text = response.text();
+        
         // Parse jawapan AI dan hantar ke HTML
-        const signalData = JSON.parse(aiResponse.data.choices[0].message.content);
+        const signalData = JSON.parse(text);
         res.json(signalData);
 
     } catch (error) {
         console.error("Error:", error.message);
-        res.status(500).json({ error: "Sistem sibuk atau API limit. Sila cuba lagi." });
+        res.status(500).json({ error: "Ralat: " + error.message });
     }
 });
 
-// 4. Jalankan Server
+// =====================================================================
+// 4. JALANKAN SERVER
+// =====================================================================
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => console.log(`Server berjalan di port ${PORT}`));
