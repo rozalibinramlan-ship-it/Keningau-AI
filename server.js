@@ -16,9 +16,10 @@ const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
 // Model Gemini yang masih hidup. Model 1.5 dan gemini-pro sudah dimatikan.
 // "gemini-flash-latest" ialah alias yang ikut model Flash terkini.
 const MODELS_TO_TRY = [
+    "gemini-3.8-flash",
+    "gemini-3.7-flash",
     "gemini-3.6-flash",
-    "gemini-flash-latest",
-    "gemini-2.5-flash"
+    "gemini-flash-latest"
 ];
 
 function getActiveSession() {
@@ -74,11 +75,12 @@ async function askGemini(prompt) {
                 return text;
             }
 
-            lastError = data.error?.message || "Respons kosong atau disekat";
-            console.log(`Model ${modelName} gagal: ${lastError}`);
+            const msg = data.error?.message || "Respons kosong atau disekat";
+            lastError += `[${modelName}] ${msg} | `;
+            console.log(`Model ${modelName} gagal: ${msg}`);
         } catch (err) {
-            lastError = err.message;
-            console.log(`Model ${modelName} ralat: ${lastError}`);
+            lastError += `[${modelName}] ${err.message} | `;
+            console.log(`Model ${modelName} ralat: ${err.message}`);
         }
     }
 
