@@ -159,6 +159,20 @@ function analyze(cs, hcs, session) {
     slDist = Math.min(2 * A, Math.max(0.8 * A, slDist));
     const sl = entry - dir * slDist, tp = entry + dir * slDist * session.rr;
 
+    // Entry lain ikut kaedah (selain sesi). TP guna RR sesi semasa
+    const sd1 = Math.min(2 * A, Math.max(0.8 * A, A));
+    const mk = (type, label, e, d) => ({ type, label, entry: +f(e), sl: +f(e - dir * d), tp: +f(e + dir * d * session.rr),
+        dist: Math.round(Math.abs(price - e) * 10), near: Math.abs(price - e) <= 0.5 * A });
+    const entries = [mk('MARKET', 'Harga semasa', price, sd1)];
+    if (zone) entries.push(mk('SND', 'Zon ' + zt, entry, slDist));
+    const lvl = dir === 1 ? sup : res;
+    if (lvl) entries.push(mk('SNR', dir === 1 ? 'Support' : 'Resistance', lvl.p, sd1));
+    if (up === (dir === 1)) [0.5, 0.618].forEach(r => {
+        const e = up ? HI - r * (HI - LO) : LO + r * (HI - LO);
+        if (dir === 1 ? e <= price + 0.1 * A : e >= price - 0.1 * A) entries.push(mk('FIB', 'Fib ' + (r === 0.5 ? '50' : '61.8') + '%', e, sd1));
+    });
+    entries.sort((a, b) => a.dist - b.dist);
+
     const checks = [
         { t: 'Harga dekat zon entry', ok: Math.abs(price - entry) <= 0.5 * A },
         { t: 'Bias ' + (hb === 1 ? 'naik' : 'turun') + ' timeframe atas sejajar', ok: hb === dir },
@@ -173,7 +187,7 @@ function analyze(cs, hcs, session) {
     return {
         pair: 'XAU/USD', action, entry: +f(entry), tp1: +f(tp), stop_loss: +f(sl), confidence,
         status: fails === 0 ? 'SIAP' : 'TUNGGU', price: +f(price), atr: +f(A), htf_bias: hb === 1 ? 'bull' : 'bear',
-        rr: session.rr, mapping, engines: E, checks, zone: zone ? { t: zone.t, lo: +f(zone.lo), hi: +f(zone.hi) } : null,
+        rr: session.rr, mapping, entries, engines: E, checks, zone: zone ? { t: zone.t, lo: +f(zone.lo), hi: +f(zone.hi) } : null,
         reason: `${agree}/${E.length} enjin setuju ${action}. Bias timeframe atas ${hb === 1 ? 'naik' : 'turun'}. ` +
             (zone ? `Zon ${zt} ${f(zone.lo)}-${f(zone.hi)}.` : 'Tiada zon jelas, entry harga semasa.') + (fails ? ' Belum semua syarat lepas, tunggu.' : '')
     };

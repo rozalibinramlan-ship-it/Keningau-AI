@@ -249,6 +249,8 @@ function sigCard(s, idx = 0){
   const p = x => Math.round(Math.abs(x - s.entry)*10);
   const ok = valid(s), lim = s.price && Math.abs(s.price - s.entry) > 0.05;
   const cp = (v) => `<button class="cp" data-v="${v}">Salin</button>`;
+  const nb = v => `<button class="cp" data-v="${v}" style="margin:0">${v}</button>`;
+  const ent = (s.entries||[]).map(x=>`<tr class="${x.near?'now':''}"><td>${x.label}${x.near?'':' <small>('+x.dist+' pips)</small>'}</td><td>${nb(x.entry)}</td><td>${nb(x.sl)}</td><td>${nb(x.tp)}</td></tr>`).join('');
   const plan = (s.mapping||[]).map(m=>`<tr class="${m.name===s.session?'now':''}"><td>${m.name}</td><td>1 : ${m.rr}</td><td><button class="cp" data-v="${m.tp}" style="margin:0">${m.tp}</button></td><td>+${p(m.tp)}</td></tr>`).join('');
   return `<div class="card">
     <div class="sig-h"><h3>${s.pair}</h3><span class="badge ${s.action}">${s.action}${lim?' LIMIT':''}</span></div>
@@ -258,6 +260,7 @@ function sigCard(s, idx = 0){
     <div class="kv"><span>Stop loss <small class="sl">-${p(s.stop_loss)} pips</small></span><span><b class="sl">${s.stop_loss}</b>${cp(s.stop_loss)}</span></div>
     <div class="kv"><span>Take profit sesi ${s.session} <small class="tp">+${p(s.tp1)} pips</small></span><span><b class="tp">${s.tp1}</b>${cp(s.tp1)}</span></div>
     ${plan?`<table style="margin-top:10px"><thead><tr><th>TP ikut sesi</th><th>RR</th><th>TP (tekan salin)</th><th>Pips</th></tr></thead><tbody>${plan}</tbody></table>`:''}
+    ${ent?`<table style="margin-top:14px"><thead><tr><th>Entry lain</th><th>Entry</th><th>SL</th><th>TP</th></tr></thead><tbody>${ent}</tbody></table><div class="time">Hijau = dekat harga semasa. Setiap entry ikut kaedah sendiri (zon, level, fibonacci). TP guna RR sesi semasa.</div>`:''}
     <button class="cp all" data-i="${idx}">Salin semua (entry, SL, TP)</button>
     <div class="time">${fmtT(s.ts)}</div>
   </div>`;
@@ -320,7 +323,7 @@ async function generate(){
     if(!r.ok || d.error) throw new Error(d.error || 'API gagal');
     history.unshift({pair:d.pair, action:d.action, entry:+d.entry, tp1:+d.tp1, stop_loss:+d.stop_loss,
       confidence:+d.confidence, reason:d.reason, session:d.session_active || 'UNKNOWN', ts:Date.now(),
-      tf:d.tf, price:d.price, mapping:d.mapping||[], status:d.status, htf:d.htf_bias, atr:d.atr, engines:d.engines||[], checks:d.checks||[]});
+      tf:d.tf, price:d.price, mapping:d.mapping||[], entries:d.entries||[], status:d.status, htf:d.htf_bias, atr:d.atr, engines:d.engines||[], checks:d.checks||[]});
     save(history); renderAll();
   }catch(e){
     errs.forEach(x=>{x.style.display='block';x.innerText='Ralat: '+(e.name==='AbortError'?'Server terlalu lama membalas. Cuba lagi.':e.message);});
