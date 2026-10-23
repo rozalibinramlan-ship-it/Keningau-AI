@@ -1,5 +1,6 @@
 const express = require('express');
 const cors = require('cors');
+const path = require('path');
 
 const app = express();
 app.use(cors());
@@ -177,6 +178,9 @@ function analyze(cs, hcs, session) {
             (zone ? `Zon ${zt} ${f(zone.lo)}-${f(zone.hi)}.` : 'Tiada zon jelas, entry harga semasa.') + (fails ? ' Belum semua syarat lepas, tunggu.' : '')
     };
 }
+
+// Papar halaman app di alamat utama (index.html mesti sebelah server.js)
+app.get('/', (req, res) => res.sendFile(path.join(__dirname, 'index.html')));
 
 app.get('/health', (req, res) => res.status(200).send('OK'));
 
