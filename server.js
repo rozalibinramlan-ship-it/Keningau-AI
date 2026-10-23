@@ -52,22 +52,21 @@ app.get('/api/generate-signal', async (req, res) => {
         let success = false;
         let lastError = "";
 
-        // Senarai model asas yang 100% ada di v1
-        const modelsToTry = ["gemini-1.0-pro", "gemini-1.0-pro-001"];
+        // Cuba guna v1 (bukan v1beta) dan nama model rasmi
+        const modelsToTry = ["gemini-1.5-flash-latest", "gemini-1.5-flash", "gemini-pro"];
 
         for (let modelName of modelsToTry) {
             try {
                 console.log(`Cuba guna model: ${modelName}...`);
                 
-                // Paksa guna v1
                 const url = `https://generativelanguage.googleapis.com/v1/models/${modelName}:generateContent?key=${GEMINI_API_KEY}`;
                 
                 const response = await fetch(url, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
-                        contents: [{ parts: [{ text: prompt }] }],
-                        // generationConfig dibuang untuk elak isu "responseMimeType"
+                        contents: [{ parts: [{ text: prompt }] }]
+                        // Tiada generationConfig untuk elak isu modaliti
                     })
                 });
 
@@ -89,13 +88,11 @@ app.get('/api/generate-signal', async (req, res) => {
         }
 
         if (!success) {
-            throw new Error("Gagal. API Key anda tak boleh akses model teks asas. Ralat: " + lastError);
+            throw new Error("Gagal. Ralat: " + lastError);
         }
         
-        // Bersihkan markdown dan parse JSON
+        // Bersihkan markdown dan cari JSON
         text = text.replace(/```json|```/g, '').trim();
-        
-        // Cari JSON dalam teks (jika AI beri teks tambahan)
         const jsonMatch = text.match(/\{[\s\S]*\}/);
         if (jsonMatch) {
             text = jsonMatch[0];
