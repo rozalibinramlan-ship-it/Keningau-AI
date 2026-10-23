@@ -49,38 +49,58 @@ async function getMarketData(symbol) {
     throw new Error("TwelveData limit atau API Key tak sah");
 }
 
+const sleep = (ms) => new Promise(r => setTimeout(r, ms));
+
+// Ralat sementara (server sibuk / had kadar) -> patut cuba semula
+function isBusyError(data, status) {
+    const m = (data?.error?.message || "").toLowerCase();
+    return status === 503 || status === 429 || m.includes("high demand") || m.includes("overloaded") || m.includes("try again");
+}
+
 async function askGemini(prompt) {
     let lastError = "";
+    const ATTEMPTS_PER_MODEL = 2;
 
     for (let modelName of MODELS_TO_TRY) {
-        try {
-            console.log(`Cuba guna model: ${modelName}...`);
+        for (let attempt = 1; attempt <= ATTEMPTS_PER_MODEL; attempt++) {
+            try {
+                console.log(`Cuba guna model: ${modelName} (percubaan ${attempt})...`);
 
-            const url = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${GEMINI_API_KEY}`;
+                const url = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${GEMINI_API_KEY}`;
 
-            const response = await fetch(url, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    contents: [{ parts: [{ text: prompt }] }],
-                    generationConfig: { responseMimeType: "application/json" }
-                })
-            });
+                const response = await fetch(url, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        contents: [{ parts: [{ text: prompt }] }],
+                        generationConfig: { responseMimeType: "application/json" }
+                    })
+                });
 
-            const data = await response.json();
-            const text = data?.candidates?.[0]?.content?.parts?.[0]?.text;
+                const data = await response.json();
+                const text = data?.candidates?.[0]?.content?.parts?.[0]?.text;
 
-            if (!data.error && text) {
-                console.log(`Berjaya guna model: ${modelName}`);
-                return text;
+                if (!data.error && text) {
+                    console.log(`Berjaya guna model: ${modelName}`);
+                    return text;
+                }
+
+                const msg = data.error?.message || "Respons kosong atau disekat";
+                console.log(`Model ${modelName} gagal: ${msg}`);
+
+                // Sibuk: tunggu sekejap, cuba model sama sekali lagi
+                if (isBusyError(data, response.status) && attempt < ATTEMPTS_PER_MODEL) {
+                    await sleep(1500);
+                    continue;
+                }
+
+                lastError += `[${modelName}] ${msg} | `;
+                break; // pergi ke model seterusnya
+            } catch (err) {
+                console.log(`Model ${modelName} ralat: ${err.message}`);
+                lastError += `[${modelName}] ${err.message} | `;
+                break;
             }
-
-            const msg = data.error?.message || "Respons kosong atau disekat";
-            lastError += `[${modelName}] ${msg} | `;
-            console.log(`Model ${modelName} gagal: ${msg}`);
-        } catch (err) {
-            lastError += `[${modelName}] ${err.message} | `;
-            console.log(`Model ${modelName} ralat: ${err.message}`);
         }
     }
 
