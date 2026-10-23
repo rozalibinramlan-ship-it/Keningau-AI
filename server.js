@@ -12,18 +12,17 @@ const TD_KEYS = [
     process.env.TWELVEDATA_API_KEY_3
 ].filter(Boolean);
 
-// 2. Mapping Model AI Groq (Senarai Dikemaskini)
+// 2. Mapping Model AI Groq (Senarai Terkini dari anda)
 const GROQ_MODELS = [
-    "llama-3.3-70b-versatile", 
-    "llama-3.1-8b-instant",    
-    "llama-3.2-3b-preview",    
-    "gemma2-9b-it"             
+    "llama-3.3-70b-versatile",
+    "llama-3.1-8b-instant",
+    "meta-llama/llama-4-maverick-17b-128e-instruct",
+    "meta-llama/llama-4-scout-17b-16e-instruct"
 ];
 
 // 3. Mapping Sesi Pasaran (Masa Malaysia - MYT)
 function getActiveSession() {
     const now = new Date();
-    // Ambil waktu Malaysia
     const mytHour = parseInt(now.toLocaleString("en-US", { timeZone: "Asia/Kuala_Lumpur", hour: '2-digit', hour12: false }));
     
     if (mytHour >= 7 && mytHour < 15) {
@@ -37,7 +36,7 @@ function getActiveSession() {
     }
 }
 
-// Fungsi Ambil Data
+// Fungsi Ambil Data TwelveData
 async function getMarketData(symbol) {
     for (let key of TD_KEYS) {
         try {
@@ -52,7 +51,7 @@ async function getMarketData(symbol) {
     throw new Error("TwelveData limit atau API Key tak sah");
 }
 
-// Endpoint
+// Endpoint API
 app.get('/api/generate-signal', async (req, res) => {
     try {
         const m = await getMarketData("XAU/USD");
@@ -117,9 +116,13 @@ app.get('/api/generate-signal', async (req, res) => {
             throw new Error("Semua model AI gagal. Ralat: " + lastError);
         }
         
+        // Bersihkan markdown jika AI degil
         text = text.replace(/```json|```/g, '').trim();
+        
+        // Hantar JSON ke HTML
         const signalData = JSON.parse(text);
         
+        // Tambah info sesi pada jawapan (untuk dipaparkan di UI)
         signalData.session_active = session.name; 
         
         res.json(signalData);
