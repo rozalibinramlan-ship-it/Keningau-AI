@@ -14,15 +14,15 @@ const TD_KEYS = [
 
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY; 
 
-// 2. Mapping Sesi Pasaran (Masa Malaysia)
+// 2. Mapping Sesi Pasaran
 function getActiveSession() {
     const now = new Date();
     const mytHour = parseInt(now.toLocaleString("en-US", { timeZone: "Asia/Kuala_Lumpur", hour: '2-digit', hour12: false }));
     
-    if (mytHour >= 7 && mytHour < 15) return { name: "ASIA", tp: 8, sl: 10, desc: "Volatility rendah." };
-    if (mytHour >= 15 && mytHour < 20) return { name: "LONDON", tp: 15, sl: 12, desc: "Volatility sederhana." };
-    if (mytHour >= 20 || mytHour < 2) return { name: "NEW YORK", tp: 25, sl: 18, desc: "Volatility tinggi." };
-    return { name: "OVERLAP / LATE NY", tp: 20, sl: 15, desc: "Bercampur." };
+    if (mytHour >= 7 && mytHour < 15) return { name: "ASIA", tp: 8, sl: 10 };
+    if (mytHour >= 15 && mytHour < 20) return { name: "LONDON", tp: 15, sl: 12 };
+    if (mytHour >= 20 || mytHour < 2) return { name: "NEW YORK", tp: 25, sl: 18 };
+    return { name: "OVERLAP", tp: 20, sl: 15 };
 }
 
 // Fungsi Ambil Data TwelveData
@@ -59,32 +59,12 @@ app.get('/api/generate-signal', async (req, res) => {
         let success = false;
         let lastError = "";
 
-        // LANGKAH 1: Tanya Google model apa yang ada
-        console.log("Menyemak senarai model yang tersedia...");
-        const listUrl = `https://generativelanguage.googleapis.com/v1beta/models?key=${GEMINI_API_KEY}`;
-        const listRes = await fetch(listUrl);
-        const listData = await listRes.json();
+        // =====================================================================
+        // CARA PALING SELAMAT: GUNA NAMA MODEL YANG DISAHKAN SAHAJA
+        // =====================================================================
+        const allowedModels = ["gemini-1.5-flash", "gemini-1.5-pro"];
 
-        if (listData.error) throw new Error("Gagal dapatkan senarai model: " + listData.error.message);
-
-        // TAPIS: Cari model teks sahaja (buang model audio/suara)
-        const availableModels = listData.models
-            .filter(mod => mod.supportedGenerationMethods.includes("generateContent"))
-            .filter(mod => !mod.name.includes("audio")) 
-            .map(mod => mod.name.replace("models/", ""));
-
-        console.log("Model Teks yang dijumpai:", availableModels);
-
-        // Utamakan model 1.5-flash atau 1.5-pro
-        let modelsToTry = availableModels.filter(name => name.includes("1.5-flash") || name.includes("1.5-pro"));
-        
-        // Jika tiada, ambil 3 model pertama yang ada
-        if (modelsToTry.length === 0) {
-            modelsToTry = availableModels.slice(0, 3);
-        }
-
-        // LANGKAH 2: Cuba model tersebut
-        for (let modelName of modelsToTry) {
+        for (let modelName of allowedModels) {
             try {
                 console.log(`Cuba guna model: ${modelName}...`);
                 
@@ -101,24 +81,27 @@ app.get('/api/generate-signal', async (req, res) => {
 
                 const data = await response.json();
 
-                if (data.error) {
+                // Jika model ini wujud dan berjaya
+                if (!data.error) {
+                    text = data.candidates[0].content.parts[0].text;
+                    success = true;
+                    console.log(`Berjaya guna model: ${modelName}`);
+                    break; 
+                } else {
+                    // Simpan ralat jika gagal
                     lastError = data.error.message;
-                    continue; 
+                    console.log(`Model ${modelName} gagal: ${lastError}`);
                 }
-
-                text = data.candidates[0].content.parts[0].text;
-                success = true;
-                console.log(`Berjaya guna model: ${modelName}`);
-                break; 
 
             } catch (err) {
                 lastError = err.message;
             }
         }
 
-        if (!success) throw new Error("Gagal guna semua model. Ralat: " + lastError);
+        if (!success) {
+            throw new Error("Gagal. API Key anda mungkin tiada akses kepada model teks Gemini 1.5. Ralat: " + lastError);
+        }
         
-        // Bersihkan markdown
         text = text.replace(/```json|```/g, '').trim();
         const signalData = JSON.parse(text);
         signalData.session_active = session.name; 
