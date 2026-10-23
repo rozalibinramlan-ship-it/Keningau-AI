@@ -12,13 +12,9 @@ const TD_KEYS = [
     process.env.TWELVEDATA_API_KEY_3
 ].filter(Boolean);
 
-// 2. Senarai API Keys Gemini (Fallback System)
-const GEMINI_KEYS = [
-    process.env.GEMINI_API_KEY,
-    process.env.GEMINI_API_KEY_2
-].filter(Boolean);
+const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
 
-// 3. Mapping Sesi Pasaran (Masa Malaysia - MYT)
+// 2. Mapping Sesi Pasaran (Masa Malaysia - MYT)
 function getActiveSession() {
     const now = new Date();
     const mytHour = parseInt(now.toLocaleString("en-US", { timeZone: "Asia/Kuala_Lumpur", hour: '2-digit', hour12: false }));
@@ -72,58 +68,52 @@ app.get('/api/generate-signal', async (req, res) => {
         let success = false;
         let lastError = "";
 
-        const GEMINI_MODELS = ["gemini-1.5-flash", "gemini-1.5-pro", "gemini-pro"];
+        // --- SENARAI MODEL GEMINI TERBARU ---
+        const GEMINI_MODELS = [
+            "gemini-2.0-flash",
+            "gemini-2.0-flash-lite",
+            "gemini-1.5-flash-8b"
+        ];
 
-        // --- GELUNG UNTUK API KEY ---
-        for (let apiKey of GEMINI_KEYS) {
-            if (success) break; // Berhenti jika dah berjaya
-            
-            // --- GELUNG UNTUK MODEL ---
-            for (let modelName of GEMINI_MODELS) {
-                try {
-                    console.log(`Cuba guna model: ${modelName} (Key: ...${apiKey.slice(-4)})...`);
-                    
-                    const url = `https://generativelanguage.googleapis.com/v1/models/${modelName}:generateContent?key=${apiKey}`;
-                    
-                    const response = await fetch(url, {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({
-                            contents: [{ parts: [{ text: prompt }] }],
-                            generationConfig: {
-                                responseMimeType: "application/json"
-                            }
-                        })
-                    });
-
-                    const data = await response.json();
-
-                    if (data.error) {
-                        console.log(`Model ${modelName} gagal: ${data.error.message}`);
-                        lastError = data.error.message;
-                        
-                        // Jika ralat adalah kerana Quota/Limit API Key, kita terus tukar ke API Key seterusnya
-                        if (data.error.message.includes("Quota") || data.error.message.includes("limit") || data.error.message.includes("exhausted")) {
-                            console.log("API Key ini dah limit. Tukar ke Key seterusnya...");
-                            break; // Keluar dari gelung model, masuk ke gelung API Key seterusnya
+        for (let modelName of GEMINI_MODELS) {
+            try {
+                console.log(`Cuba guna model: ${modelName}...`);
+                
+                // Guna v1beta (kerana model 2.0-flash biasanya diletakkan di sini buat masa ini)
+                const url = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${GEMINI_API_KEY}`;
+                
+                const response = await fetch(url, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        contents: [{ parts: [{ text: prompt }] }],
+                        generationConfig: {
+                            responseMimeType: "application/json"
                         }
-                        continue; // Jika ralat model (cth: 404), cuba model lain dengan key yang sama
-                    }
+                    })
+                });
 
-                    text = data.candidates[0].content.parts[0].text;
-                    success = true;
-                    console.log(`Berjaya guna model: ${modelName}`);
-                    break; 
+                const data = await response.json();
 
-                } catch (err) {
-                    console.log(`Ralat rangkaian: ${err.message}`);
-                    lastError = err.message;
+                if (data.error) {
+                    console.log(`Model ${modelName} gagal: ${data.error.message}`);
+                    lastError = data.error.message;
+                    continue; 
                 }
+
+                text = data.candidates[0].content.parts[0].text;
+                success = true;
+                console.log(`Berjaya guna model: ${modelName}`);
+                break; 
+
+            } catch (err) {
+                console.log(`Ralat rangkaian pada model ${modelName}`);
+                lastError = err.message;
             }
         }
 
         if (!success) {
-            throw new Error("Semua kombinasi API Key dan Model Gemini gagal. Ralat terakhir: " + lastError);
+            throw new Error("Semua kombinasi gagal. Ralat terakhir: " + lastError);
         }
         
         text = text.replace(/```json|```/g, '').trim();
