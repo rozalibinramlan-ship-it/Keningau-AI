@@ -25,29 +25,40 @@
         .reason { margin-top: 15px; padding: 12px; background: #0d1117; border-radius: 8px; font-style: italic; color: #8b949e; font-size: 13px; border-left: 3px solid #58a6ff;}
         #loading { display: none; text-align: center; color: #e3b341; font-weight: bold; margin-bottom: 20px;}
         #errorBox { display: none; background: rgba(248,81,73,0.1); border: 1px solid #f85149; color: #f85149; padding: 12px; border-radius: 8px; margin-bottom: 20px; font-size: 13px; text-align: center;}
-        .footer { text-align: center; font-size: 11px; color: #484f58; margin-top: 15px;}
+        .footer { text-align: center; font-size: 11px; color: #484f58; margin-top: 10px;}
     </style>
 </head>
 <body>
     <div class="container">
         <h2>Keningau AI</h2>
         <p class="subtitle">Dikuasakan oleh TwelveData & Groq AI</p>
+        
         <button id="btnSignal" onclick="mintaSignal()">Jana Signal AI</button>
+        
         <div id="loading">AI sedang menganalisis pasaran... (Render mungkin ambil 30s kalau baru bangun)</div>
         <div id="errorBox"></div>
+        
         <div class="card" id="signalCard">
             <div class="header">
                 <h3 id="pair">XAU/USD</h3>
                 <span class="badge" id="action">...</span>
             </div>
+            
             <div class="row"><span class="label">Entry Price</span><span class="val" id="entry">-</span></div>
             <div class="row"><span class="label">Take Profit (TP1)</span><span class="val tp-color" id="tp1">-</span></div>
             <div class="row"><span class="label">Stop Loss</span><span class="val sl-color" id="sl">-</span></div>
-            <div class="row" style="border-top: 1px dashed #30363d; padding-top: 12px;"><span class="label">Confidence Score</span><span class="val" id="confidence">-</span></div>
+            
+            <div class="row" style="border-top: 1px dashed #30363d; padding-top: 12px;">
+                <span class="label">Confidence Score</span><span class="val" id="confidence">-</span>
+            </div>
+            
             <div class="reason">"<span id="reason">-</span>"</div>
+            
+            <div class="footer" id="session" style="color: #e3b341; font-weight: bold; margin-bottom: 5px;">-</div>
             <div class="footer" id="time">-</div>
         </div>
     </div>
+
     <script>
         // Pastikan URL Render anda betul
         const API_URL = 'https://keningau-ai.onrender.com/api/generate-signal'; 
@@ -68,14 +79,20 @@
                 if (!response.ok || data.error) throw new Error(data.error || "API gagal");
 
                 loading.style.display = 'none'; card.style.display = 'block';
+                
+                // Masukkan data ke UI
                 document.getElementById('pair').innerText = data.pair;
                 document.getElementById('entry').innerText = data.entry;
                 document.getElementById('tp1').innerText = data.tp1;
                 document.getElementById('sl').innerText = data.stop_loss;
                 document.getElementById('confidence').innerText = data.confidence + " / 100";
                 document.getElementById('reason').innerText = data.reason;
-                document.getElementById('time').innerText = "Last update: " + new Date().toLocaleString();
+                
+                // Info Tambahan (Sesi & Masa)
+                document.getElementById('session').innerText = "Sesi Aktif: " + (data.session_active || "UNKNOWN");
+                document.getElementById('time').innerText = "Kemaskini: " + new Date().toLocaleString();
 
+                // Warna Badge
                 const actionBadge = document.getElementById('action');
                 actionBadge.innerText = data.action;
                 actionBadge.className = data.action === "BUY" ? "badge buy" : "badge sell";
