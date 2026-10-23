@@ -1,7 +1,6 @@
 {
   "name": "keningau-ai-backend",
   "version": "1.0.0",
-  "description": "Backend signal AI menggunakan Groq untuk Keningau AI",
   "main": "server.js",
   "scripts": {
     "start": "node server.js"
