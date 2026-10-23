@@ -8,7 +8,6 @@ app.use(express.json());
 
 // =====================================================================
 // 1. MASUKKAN API KEYS ANDA DI SINI
-// (Jika anda guna Environment Variables di Render, biarkan 'process.env...')
 // =====================================================================
 const TD_KEYS = [
     process.env.TWELVEDATA_API_KEY || 'LETAK_TWELVEDATA_KEY_1_DISINI',
@@ -18,7 +17,7 @@ const TD_KEYS = [
 
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY || 'LETAK_GEMINI_API_KEY_DISINI';
 
-// Setup Gemini AI
+// Setup Gemini AI (Menggunakan versi v1 yang lebih stabil)
 const genAI = new GoogleGenerativeAI(GEMINI_API_KEY);
 
 // =====================================================================
@@ -26,7 +25,6 @@ const genAI = new GoogleGenerativeAI(GEMINI_API_KEY);
 // =====================================================================
 async function getMarketData(symbol) {
     for (let i = 0; i < TD_KEYS.length; i++) {
-        // Langkau jika key kosong
         if (!TD_KEYS[i] || TD_KEYS[i].includes('LETAK_')) continue;
 
         try {
@@ -54,19 +52,19 @@ async function getMarketData(symbol) {
 // =====================================================================
 app.get('/api/generate-signal', async (req, res) => {
     try {
-        const pair = "XAU/USD"; // Anda boleh tukar pair di sini
+        const pair = "XAU/USD"; 
 
         // Ambil Data Pasaran
         const marketData = await getMarketData(pair);
 
-        // Sediakan Prompt untuk Gemini
+        // Sediakan Prompt
         const prompt = `
             Anda adalah pakar analisis teknikal Forex.
             Pair: ${pair}
             Harga Terkini: ${marketData.latestPrice}
             Sejarah 5 Harga Terakhir (Lama ke Baru): ${marketData.history.join(', ')}
             
-            Berdasarkan data ini, berikan signal trading. Jawab HANYA dalam format JSON tanpa sebarang teks lain:
+            Berdasarkan data ini, berikan signal trading. Jawab HANYA dalam format JSON tanpa sebarang teks lain (jangan letak markdown json):
             {
                 "pair": "${pair}",
                 "action": "BUY" atau "SELL",
@@ -78,17 +76,18 @@ app.get('/api/generate-signal', async (req, res) => {
             }
         `;
 
-        // Panggil Gemini (Guna model gemini-1.5-flash)
+        // Panggil Gemini AI
+        // Kita guna versi 'gemini-1.5-flash' dan paksa API version 'v1' untuk elak ralat 404
         const model = genAI.getGenerativeModel({ 
             model: "gemini-1.5-flash",
-            generationConfig: { responseMimeType: "application/json" } // Paksa bagi format JSON
-        });
+            generationConfig: { responseMimeType: "application/json" }
+        }, { apiVersion: "v1" }); 
 
         const result = await model.generateContent(prompt);
         const response = await result.response;
         const text = response.text();
         
-        // Parse jawapan AI dan hantar ke HTML
+        // Parse jawapan AI
         const signalData = JSON.parse(text);
         res.json(signalData);
 
