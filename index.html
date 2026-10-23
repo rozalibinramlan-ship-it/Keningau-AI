@@ -49,7 +49,9 @@
         </div>
     </div>
     <script>
+        // Pastikan URL Render anda betul
         const API_URL = 'https://keningau-ai.onrender.com/api/generate-signal'; 
+        
         async function mintaSignal() {
             const btn = document.getElementById('btnSignal');
             const loading = document.getElementById('loading');
@@ -62,6 +64,7 @@
             try {
                 const response = await fetch(API_URL);
                 const data = await response.json();
+                
                 if (!response.ok || data.error) throw new Error(data.error || "API gagal");
 
                 loading.style.display = 'none'; card.style.display = 'block';
@@ -80,7 +83,7 @@
             } catch (error) {
                 loading.style.display = 'none';
                 errorBox.style.display = 'block';
-                errorBox.innerText = "Ralat Sistem: " + error.message + " - Cuba lagi dalam 30 saat (Render sedang bangun)";
+                errorBox.innerText = "Ralat Sistem: " + error.message;
             } finally {
                 btn.disabled = false; btn.innerText = "Jana Signal AI";
             }
