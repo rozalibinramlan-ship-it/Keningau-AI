@@ -17,7 +17,7 @@ const TD_KEYS = [
 
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY || 'LETAK_GEMINI_API_KEY_DISINI';
 
-// Setup Gemini AI (Menggunakan versi v1 yang lebih stabil)
+// Setup Gemini AI
 const genAI = new GoogleGenerativeAI(GEMINI_API_KEY);
 
 // =====================================================================
@@ -64,7 +64,7 @@ app.get('/api/generate-signal', async (req, res) => {
             Harga Terkini: ${marketData.latestPrice}
             Sejarah 5 Harga Terakhir (Lama ke Baru): ${marketData.history.join(', ')}
             
-            Berdasarkan data ini, berikan signal trading. Jawab HANYA dalam format JSON tanpa sebarang teks lain (jangan letak markdown json):
+            Berdasarkan data ini, berikan signal trading. Jawab HANYA dalam format JSON tanpa sebarang teks lain (jangan letak markdown):
             {
                 "pair": "${pair}",
                 "action": "BUY" atau "SELL",
@@ -76,23 +76,23 @@ app.get('/api/generate-signal', async (req, res) => {
             }
         `;
 
-        // Panggil Gemini AI
-        // Kita guna versi 'gemini-1.5-flash' dan paksa API version 'v1' untuk elak ralat 404
+        // Panggil Gemini AI (Guna model 'gemini-1.5-flash-latest')
         const model = genAI.getGenerativeModel({ 
-            model: "gemini-1.5-flash",
+            model: "gemini-1.5-flash-latest",
             generationConfig: { responseMimeType: "application/json" }
-        }, { apiVersion: "v1" }); 
+        }); 
 
         const result = await model.generateContent(prompt);
         const response = await result.response;
         const text = response.text();
         
-        // Parse jawapan AI
+        // Parse jawapan AI dan hantar ke HTML
         const signalData = JSON.parse(text);
         res.json(signalData);
 
     } catch (error) {
         console.error("Error:", error.message);
+        // Hantar mesej ralat sebenar ke browser supaya senang nak baiki
         res.status(500).json({ error: "Ralat: " + error.message });
     }
 });
