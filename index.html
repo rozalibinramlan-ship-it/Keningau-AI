@@ -31,7 +31,7 @@
 <body>
     <div class="container">
         <h2>Keningau AI</h2>
-        <p class="subtitle">Dikuasakan oleh TwelveData & Gemini AI</p>
+        <p class="subtitle">Dikuasakan oleh TwelveData & Groq AI</p>
         <button id="btnSignal" onclick="mintaSignal()">Jana Signal AI</button>
         <div id="loading">AI sedang menganalisis pasaran... (Render mungkin ambil 30s kalau baru bangun)</div>
         <div id="errorBox"></div>
@@ -49,7 +49,7 @@
         </div>
     </div>
     <script>
-        // Pastikan URL Render anda betul
+        // PASTIKAN URL INI ADALAH URL RENDER ANDA
         const API_URL = 'https://keningau-ai.onrender.com/api/generate-signal'; 
         
         async function mintaSignal() {
