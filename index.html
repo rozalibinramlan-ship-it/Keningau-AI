@@ -95,29 +95,22 @@
     <script>
         // ==============================================================
         // PENTING: TUKAR URL DI BAWAH INI KEPADA URL RENDER BARU ANDA!
-        // Contoh: 'https://keningau-ai.onrender.com/api/generate-signal'
         // ==============================================================
         const API_URL = 'https://nama-projek-baru-anda.onrender.com/api/generate-signal'; 
 
         async function mintaSignal() {
-            // Tunjuk loading
             document.getElementById('loading').style.display = 'block';
             document.getElementById('signalCard').style.display = 'none';
 
             try {
-                // Panggil Backend Render
                 const response = await fetch(API_URL);
-                
-                // Jika server Render tengah tidur (free tier), ia akan ambil masa.
                 const data = await response.json();
 
                 if (data.error) throw new Error(data.error);
 
-                // Sembunyikan loading, tunjuk card
                 document.getElementById('loading').style.display = 'none';
                 document.getElementById('signalCard').style.display = 'block';
 
-                // Masukkan data AI ke dalam HTML
                 document.getElementById('pair').innerText = data.pair;
                 document.getElementById('entry').innerText = data.entry;
                 document.getElementById('tp1').innerText = data.tp1;
@@ -125,7 +118,6 @@
                 document.getElementById('confidence').innerText = data.confidence + " / 100";
                 document.getElementById('reason').innerText = data.reason;
 
-                // Tukar warna badge (BUY = Hijau, SELL = Merah)
                 const actionBadge = document.getElementById('action');
                 actionBadge.innerText = data.action;
                 

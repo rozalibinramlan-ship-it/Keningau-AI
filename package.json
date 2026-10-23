@@ -1,7 +1,7 @@
 {
   "name": "keningau-ai-backend",
   "version": "1.0.0",
-  "description": "Backend untuk signal AI",
+  "description": "Backend signal AI untuk Keningau AI",
   "main": "Server.js",
   "scripts": {
     "start": "node Server.js"
