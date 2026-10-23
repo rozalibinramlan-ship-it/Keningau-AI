@@ -12,12 +12,10 @@ const TD_KEYS = [
     process.env.TWELVEDATA_API_KEY_3
 ].filter(Boolean);
 
-// 2. Mapping Model AI Groq (Senarai Terkini dari anda)
+// 2. Senarai Model AI Groq (Diringkaskan)
 const GROQ_MODELS = [
     "llama-3.3-70b-versatile",
-    "llama-3.1-8b-instant",
-    "meta-llama/llama-4-maverick-17b-128e-instruct",
-    "meta-llama/llama-4-scout-17b-16e-instruct"
+    "llama-3.1-8b-instant"
 ];
 
 // 3. Mapping Sesi Pasaran (Masa Malaysia - MYT)
@@ -62,7 +60,7 @@ app.get('/api/generate-signal', async (req, res) => {
         Recent History (Old to New): ${m.history.join(', ')}.
         Current Market Session: ${session.name} (${session.desc}).
         
-        Analyze the trend. Reply ONLY JSON format:
+        Analyze the trend. Reply ONLY JSON format, no other text:
         {"pair":"XAU/USD","action":"BUY" or "SELL","entry":${m.latestPrice},"tp1":0,"stop_loss":0,"confidence":85,"reason":"Short reason here"}
         
         RULES:
@@ -88,8 +86,8 @@ app.get('/api/generate-signal', async (req, res) => {
                     body: JSON.stringify({
                         model: modelName,
                         messages: [{ role: "user", content: prompt }],
-                        response_format: { type: "json_object" },
                         temperature: 0.3 
+                        // response_format dibuang sementara untuk ujian
                     })
                 });
 
@@ -122,7 +120,7 @@ app.get('/api/generate-signal', async (req, res) => {
         // Hantar JSON ke HTML
         const signalData = JSON.parse(text);
         
-        // Tambah info sesi pada jawapan (untuk dipaparkan di UI)
+        // Tambah info sesi pada jawapan
         signalData.session_active = session.name; 
         
         res.json(signalData);
