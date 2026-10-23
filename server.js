@@ -1,6 +1,5 @@
 const express = require('express');
 const cors = require('cors');
-const { GoogleGenAI } = require("@google/genai");
 
 const app = express();
 app.use(cors());
@@ -12,8 +11,6 @@ const TD_KEYS = [
     process.env.TWELVEDATA_API_KEY_2, 
     process.env.TWELVEDATA_API_KEY_3
 ].filter(Boolean);
-
-const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
 
 // 2. Ambil Data TwelveData
 async function getMarketData(symbol) {
@@ -41,11 +38,15 @@ app.get('/api/generate-signal', async (req, res) => {
         // Prompt untuk Gemini
         const prompt = `Pair XAU/USD Price ${m.latestPrice} History ${m.history.join(',')} Reply ONLY JSON: {"pair":"XAU/USD","action":"BUY","entry":${m.latestPrice},"tp1":0,"stop_loss":0,"confidence":85,"reason":"Fresh demand"}. tp1/sl +/- 20 dollars.`;
 
+        // --- PENYELESAIAN RALAT ESM ---
+        // Guna dynamic import untuk panggil @google/genai
+        const { GoogleGenAI } = await import("@google/genai");
+        const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+
         let text = "";
         
-        // --- LOGIK AUTO-FALLBACK ---
+        // Cuba model 2.5-flash, kalau gagal fallback ke 1.5-flash
         try {
-            // Cuba model 2.5-flash
             const response = await ai.models.generateContent({
                 model: "gemini-2.5-flash",
                 contents: prompt
@@ -53,7 +54,6 @@ app.get('/api/generate-signal', async (req, res) => {
             text = response.text;
         } catch (error) {
             console.log("2.5-flash gagal, fallback ke 1.5-flash...");
-            // Kalau gagal, cuba 1.5-flash
             const fallbackResponse = await ai.models.generateContent({
                 model: "gemini-1.5-flash",
                 contents: prompt
@@ -66,7 +66,7 @@ app.get('/api/generate-signal', async (req, res) => {
         res.json(JSON.parse(text));
 
     } catch (e) {
-        console.error(e);
+        console.error("Ralat Sistem:", e.message);
         res.status(500).json({ error: e.message });
     }
 });
