@@ -6,99 +6,74 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
-// =====================================================================
-// 1. MASUKKAN API KEYS ANDA DI SINI
-// =====================================================================
+// Ambil API Keys dari Render
 const TD_KEYS = [
-    process.env.TWELVEDATA_API_KEY || 'LETAK_TWELVEDATA_KEY_1_DISINI',
-    process.env.TWELVEDATA_API_KEY_2 || 'LETAK_TWELVEDATA_KEY_2_DISINI',
-    process.env.TWELVEDATA_API_KEY_3 || 'LETAK_TWELVEDATA_KEY_3_DISINI'
-];
+    process.env.TWELVEDATA_API_KEY,
+    process.env.TWELVEDATA_API_KEY_2,
+    process.env.TWELVEDATA_API_KEY_3
+].filter(Boolean);
 
-const GEMINI_API_KEY = process.env.GEMINI_API_KEY || 'LETAK_GEMINI_API_KEY_DISINI';
-
-// Setup Gemini AI
+const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
 const genAI = new GoogleGenerativeAI(GEMINI_API_KEY);
 
-// =====================================================================
-// 2. FUNGSI AMBIL DATA DARI TWELVEDATA
-// =====================================================================
+// Fungsi Ambil Data TwelveData
 async function getMarketData(symbol) {
     for (let i = 0; i < TD_KEYS.length; i++) {
-        if (!TD_KEYS[i] || TD_KEYS[i].includes('LETAK_')) continue;
-
         try {
-            const url = `https://api.twelvedata.com/time_series?symbol=${symbol}&interval=1h&outputsize=5&apikey=${TD_KEYS[i]}`;
+            const url = `https://api.twelvedata.com/time_series?symbol=${symbol}&interval=1h&outputsize=10&apikey=${TD_KEYS[i]}`;
             const response = await fetch(url);
             const data = await response.json();
-
-            if (data.status !== "error" && data.values) {
-                return {
-                    latestPrice: data.values[0].close,
-                    history: data.values.map(v => v.close)
+            
+            if (data.values && data.values[0]) {
+                const closes = data.values.map(v => parseFloat(v.close));
+                return { 
+                    latestPrice: closes[0], 
+                    history: [...closes].reverse() 
                 };
-            } else {
-                console.log(`API Key ${i+1} gagal: ${data.message}`);
             }
         } catch (err) {
-            console.log(`API Key ${i+1} error. Cuba key seterusnya...`);
+            console.log(`Key ${i+1} gagal`);
         }
     }
-    throw new Error("Semua TwelveData API Key dah limit atau gagal.");
+    throw new Error("Semua TwelveData Key limit / belum set di Render");
 }
 
-// =====================================================================
-// 3. ENDPOINT UNTUK DIPANGGIL OLEH HTML
-// =====================================================================
+// Endpoint API
 app.get('/api/generate-signal', async (req, res) => {
     try {
-        const pair = "XAU/USD"; 
+        const marketData = await getMarketData("XAU/USD");
 
-        // Ambil Data Pasaran
-        const marketData = await getMarketData(pair);
-
-        // Sediakan Prompt
         const prompt = `
-            Anda adalah pakar analisis teknikal Forex.
-            Pair: ${pair}
-            Harga Terkini: ${marketData.latestPrice}
-            Sejarah 5 Harga Terakhir (Lama ke Baru): ${marketData.history.join(', ')}
-            
-            Berdasarkan data ini, berikan signal trading. Jawab HANYA dalam format JSON tanpa sebarang teks lain (jangan letak markdown):
-            {
-                "pair": "${pair}",
-                "action": "BUY" atau "SELL",
-                "entry": ${marketData.latestPrice},
-                "tp1": [letak nilai harga sasaran],
-                "stop_loss": [letak nilai harga stop loss],
-                "confidence": [letak nombor 1-100],
-                "reason": "[sebab ringkas maks 10 patah perkataan]"
-            }
+        Pair: XAU/USD, Price: ${marketData.latestPrice}, History: ${marketData.history.join(', ')}
+        Give signal. Reply ONLY JSON: {"pair":"XAU/USD","action":"BUY","entry":${marketData.latestPrice},"tp1":0,"stop_loss":0,"confidence":85,"reason":"Fresh demand bounce"}
+        tp1/stop_loss realistic +/- 15-35 dollars from entry.
         `;
 
-        // Panggil Gemini AI (Guna model 'gemini-1.5-flash-latest')
-        const model = genAI.getGenerativeModel({ 
-            model: "gemini-1.5-flash-latest",
-            generationConfig: { responseMimeType: "application/json" }
-        }); 
-
-        const result = await model.generateContent(prompt);
-        const response = await result.response;
-        const text = response.text();
+        let text = "";
         
-        // Parse jawapan AI dan hantar ke HTML
+        // Cuba 1.5-flash, fallback ke 2.0-flash
+        try {
+            const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" }); 
+            const result = await model.generateContent(prompt);
+            text = result.response.text();
+        } catch (e) {
+            console.log("1.5-flash gagal, fallback ke 2.0-flash...", e.message);
+            const fallbackModel = genAI.getGenerativeModel({ model: "gemini-2.0-flash" }); 
+            const fallbackResult = await fallbackModel.generateContent(prompt);
+            text = fallbackResult.response.text();
+        }
+        
+        // Bersihkan markdown jika AI degil
+        text = text.replace(/```json|```/g, '').trim();
         const signalData = JSON.parse(text);
+        
         res.json(signalData);
 
     } catch (error) {
-        console.error("Error:", error.message);
-        // Hantar mesej ralat sebenar ke browser supaya senang nak baiki
-        res.status(500).json({ error: "Ralat: " + error.message });
+        console.error("Ralat Sistem:", error.message);
+        res.status(500).json({ error: error.message });
     }
 });
 
-// =====================================================================
-// 4. JALANKAN SERVER
-// =====================================================================
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => console.log(`Server berjalan di port ${PORT}`));
+app.listen(PORT, () => console.log(`Server jalan di port ${PORT}`));
