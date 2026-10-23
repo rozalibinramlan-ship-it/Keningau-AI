@@ -6,7 +6,7 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
-// Ambil API Keys dari Render
+// 1. Ambil API Keys dari Render
 const TD_KEYS = [
     process.env.TWELVEDATA_API_KEY,
     process.env.TWELVEDATA_API_KEY_2,
@@ -16,7 +16,7 @@ const TD_KEYS = [
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
 const genAI = new GoogleGenerativeAI(GEMINI_API_KEY);
 
-// Fungsi Ambil Data TwelveData
+// 2. Fungsi Ambil Data TwelveData
 async function getMarketData(symbol) {
     for (let i = 0; i < TD_KEYS.length; i++) {
         try {
@@ -38,7 +38,7 @@ async function getMarketData(symbol) {
     throw new Error("Semua TwelveData Key limit / belum set di Render");
 }
 
-// Endpoint API
+// 3. Endpoint API
 app.get('/api/generate-signal', async (req, res) => {
     try {
         const marketData = await getMarketData("XAU/USD");
@@ -51,16 +51,26 @@ app.get('/api/generate-signal', async (req, res) => {
 
         let text = "";
         
-        // Cuba 1.5-flash, fallback ke 2.0-flash
+        // --- LOGIK AUTO-FALLBACK MODEL GEMINI ---
         try {
-            const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" }); 
+            // 1. Cuba model terbaru yang Google syorkan (gemini-3.0-flash)
+            const model = genAI.getGenerativeModel({ model: "gemini-3.0-flash" }); 
             const result = await model.generateContent(prompt);
             text = result.response.text();
-        } catch (e) {
-            console.log("1.5-flash gagal, fallback ke 2.0-flash...", e.message);
-            const fallbackModel = genAI.getGenerativeModel({ model: "gemini-2.0-flash" }); 
-            const fallbackResult = await fallbackModel.generateContent(prompt);
-            text = fallbackResult.response.text();
+        } catch (e1) {
+            console.log("Gagal guna gemini-3.0-flash. Cuba fallback ke gemini-1.5-pro...", e1.message);
+            try {
+                // 2. Kalau gagal, cuba model 1.5-pro
+                const fallbackModel1 = genAI.getGenerativeModel({ model: "gemini-1.5-pro" }); 
+                const fallbackResult1 = await fallbackModel1.generateContent(prompt);
+                text = fallbackResult1.response.text();
+            } catch (e2) {
+                console.log("Gagal guna 1.5-pro. Cuba fallback terakhir ke gemini-pro...", e2.message);
+                // 3. Kalau masih gagal, cuba gemini-pro klasik
+                const fallbackModel2 = genAI.getGenerativeModel({ model: "gemini-pro" }); 
+                const fallbackResult2 = await fallbackModel2.generateContent(prompt);
+                text = fallbackResult2.response.text();
+            }
         }
         
         // Bersihkan markdown jika AI degil
