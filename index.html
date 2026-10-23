@@ -1,110 +1,360 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="ms">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Keningau AI Signal</title>
-    <style>
-        body { background-color: #0d1117; color: #c9d1d9; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif; padding: 20px; display: flex; flex-direction: column; align-items: center; margin: 0; min-height: 100vh; }
-        .container { width: 100%; max-width: 400px; margin-top: 20px;}
-        h2 { text-align: center; color: #58a6ff; margin-bottom: 5px; font-size: 24px;}
-        p.subtitle { text-align: center; color: #8b949e; font-size: 13px; margin-top: 0; margin-bottom: 25px;}
-        button { width: 100%; padding: 15px; background: #238636; color: white; border: none; border-radius: 8px; font-size: 16px; font-weight: bold; cursor: pointer; margin-bottom: 20px; transition: 0.2s; }
-        button:disabled { background: #30363d; cursor: not-allowed; opacity: 0.6; }
-        button:active:not(:disabled) { background: #2ea043; transform: scale(0.98); }
-        .card { background: #161b22; border: 1px solid #30363d; border-radius: 12px; padding: 20px; display: none; box-shadow: 0 4px 6px rgba(0,0,0,0.3); }
-        .header { display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #30363d; padding-bottom: 10px; margin-bottom: 15px;}
-        .header h3 { margin: 0; font-size: 20px; }
-        .badge { padding: 6px 14px; border-radius: 20px; font-size: 14px; font-weight: bold; }
-        .badge.buy { background: rgba(63, 185, 80, 0.15); color: #3fb950; }
-        .badge.sell { background: rgba(248, 81, 73, 0.15); color: #f85149; }
-        .row { display: flex; justify-content: space-between; margin: 12px 0; font-size: 15px;}
-        .label { color: #8b949e; }
-        .val { font-weight: bold; font-family: monospace; font-size: 16px; }
-        .tp-color { color: #3fb950; } .sl-color { color: #f85149; }
-        .reason { margin-top: 15px; padding: 12px; background: #0d1117; border-radius: 8px; font-style: italic; color: #8b949e; font-size: 13px; border-left: 3px solid #58a6ff;}
-        #loading { display: none; text-align: center; color: #e3b341; font-weight: bold; margin-bottom: 20px;}
-        #errorBox { display: none; background: rgba(248,81,73,0.1); border: 1px solid #f85149; color: #f85149; padding: 12px; border-radius: 8px; margin-bottom: 20px; font-size: 13px; text-align: center;}
-        .footer { text-align: center; font-size: 11px; color: #484f58; margin-top: 10px;}
-    </style>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>Keningau AI</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet">
+<style>
+:root{--bg:#0a0e11;--card:#10161a;--bd:#1d272d;--tx:#e6edf3;--mut:#8593a0;--ac:#12b886;--buy:#3fb950;--sell:#f85149;--warn:#e3b341}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--tx);font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Helvetica,Arial,sans-serif}
+h1,h2,h3,.num{font-family:"Space Grotesk",-apple-system,"Segoe UI",sans-serif}
+.app{max-width:440px;margin:0 auto;padding:calc(18px + env(safe-area-inset-top)) 16px calc(96px + env(safe-area-inset-bottom))}
+.brand{font-size:22px;font-weight:700;margin:0 0 4px}.brand b{color:var(--ac)}
+.sub{color:var(--mut);font-size:13px;margin:0 0 18px}
+.view{display:none}.view.on{display:block}
+.card{background:var(--card);border:1px solid var(--bd);border-radius:20px;padding:18px;margin-bottom:14px}
+.card h3{margin:0 0 12px;font-size:15px;color:var(--mut);font-weight:500}
+.srow{display:flex;justify-content:space-between;align-items:center;padding:7px 0;font-size:15px}
+.srow small{color:var(--mut);margin-left:6px}
+.open{color:var(--ac)}.shut{color:var(--mut)}
+.dot{display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--ac);margin-right:6px}
+.btn{width:100%;padding:15px;background:var(--ac);color:#04130d;border:0;border-radius:14px;font-size:16px;font-weight:700;cursor:pointer}
+.btn:disabled{background:#26323a;color:var(--mut);cursor:not-allowed}
+.btn.ghost{background:transparent;border:1px solid var(--bd);color:var(--mut);font-weight:500;margin-top:10px}
+.msg{display:none;text-align:center;color:var(--warn);font-size:13px;margin:12px 0}
+.err{display:none;background:rgba(248,81,73,.1);border:1px solid var(--sell);color:var(--sell);padding:12px;border-radius:12px;margin:12px 0;font-size:13px}
+.sig-h{display:flex;justify-content:space-between;align-items:center}
+.sig-h h3{margin:0;color:var(--tx);font-size:19px}
+.badge{padding:5px 12px;border-radius:20px;font-size:13px;font-weight:700}
+.badge.BUY{background:rgba(63,185,80,.15);color:var(--buy)}.badge.SELL{background:rgba(248,81,73,.15);color:var(--sell)}
+.tags{display:flex;gap:8px;margin:10px 0;flex-wrap:wrap}
+.tag{background:#18222a;border-radius:20px;padding:4px 11px;font-size:12px;color:var(--mut)}
+.tag.ses{color:var(--warn)}.tag.bad{color:var(--sell)}
+.kv{display:flex;justify-content:space-between;padding:9px 0;border-top:1px solid var(--bd);font-size:15px}
+.kv span:first-child{color:var(--mut)}.kv b{font-family:"Space Grotesk",monospace}
+.tp{color:var(--buy)}.sl{color:var(--sell)}
+.bar{height:5px;background:#1d272d;border-radius:5px;margin-top:6px;overflow:hidden}.bar i{display:block;height:100%;background:var(--warn)}
+.why{margin-top:12px;font-size:13px;color:var(--mut);line-height:1.5}
+.time{font-size:11px;color:#5b6772;margin-top:8px}
+table{width:100%;border-collapse:collapse;font-size:13px}
+th{color:var(--mut);font-weight:500;text-align:left;padding:6px 0}
+td{padding:9px 0;border-top:1px solid var(--bd)}
+tr.now td{color:var(--ac);font-weight:700}
+.empty{color:var(--mut);font-size:14px;text-align:center;padding:24px 0}
+.tools{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.tool{background:var(--card);border:1px solid var(--bd);border-radius:20px;padding:16px;min-height:120px}
+.tool b{display:block;font-size:16px;margin-bottom:6px;font-family:"Space Grotesk",sans-serif}
+.tool span{font-size:12px;color:var(--mut)}
+.tf{width:100%;margin-bottom:10px;padding:12px;background:var(--card);color:var(--tx);border:1px solid var(--bd);border-radius:12px;font-size:14px}
+.eng{display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-top:12px}
+.e{background:#0d1317;border:1px solid var(--bd);border-radius:10px;padding:8px 10px;font-size:12px}
+.e b{display:block;font-size:12px}.e span{color:var(--mut);font-size:11px}
+.e.u b{color:var(--buy)}.e.d b{color:var(--sell)}.e.z b{color:var(--mut)}
+.chk{margin-top:12px;font-size:13px}.chk div{padding:3px 0;color:var(--mut)}.chk .y{color:var(--buy)}.chk .n{color:var(--sell)}
+.tag.go{color:var(--buy)}.tag.wait{color:var(--warn)}
+.inp{width:84px;background:#0d1317;color:var(--tx);border:1px solid var(--bd);border-radius:8px;padding:8px;text-align:right;font-size:14px}
+.tf.inl{width:auto;margin:0}
+.cp{background:#18222a;border:1px solid var(--bd);color:var(--mut);border-radius:8px;padding:4px 9px;font-size:12px;cursor:pointer;margin-left:8px;font-family:inherit}
+.cp.ok{color:var(--ac);border-color:var(--ac)}
+.cp.all{width:100%;margin:12px 0 0;padding:11px;font-size:14px}
+.chips{display:flex;gap:8px;overflow-x:auto;margin:14px 0 10px;padding-bottom:4px}
+.chip{flex:none;background:var(--card);border:1px solid var(--bd);color:var(--mut);border-radius:20px;padding:7px 13px;font-size:13px;cursor:pointer}
+.chip.on{color:var(--ac);border-color:var(--ac)}
+nav{position:fixed;left:0;right:0;bottom:0;background:rgba(10,14,17,.96);border-top:1px solid var(--bd);display:flex;justify-content:center;padding-bottom:env(safe-area-inset-bottom);backdrop-filter:blur(8px)}
+nav div{display:flex;width:100%;max-width:440px}
+nav button{flex:1;background:none;border:0;color:var(--mut);padding:10px 0 12px;font-size:11px;cursor:pointer;display:flex;flex-direction:column;align-items:center;gap:4px}
+nav button svg{width:24px;height:24px;stroke:currentColor;fill:none;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+nav button.on{color:var(--ac)}
+nav button:focus-visible,.btn:focus-visible{outline:2px solid var(--ac);outline-offset:2px}
+</style>
 </head>
 <body>
-    <div class="container">
-        <h2>Keningau AI</h2>
-        <p class="subtitle">Dikuasakan oleh TwelveData & Groq AI</p>
-        
-        <button id="btnSignal" onclick="mintaSignal()">Jana Signal AI</button>
-        
-        <div id="loading">AI sedang menganalisis pasaran... (Render mungkin ambil 30s kalau baru bangun)</div>
-        <div id="errorBox"></div>
-        
-        <div class="card" id="signalCard">
-            <div class="header">
-                <h3 id="pair">XAU/USD</h3>
-                <span class="badge" id="action">...</span>
-            </div>
-            
-            <div class="row"><span class="label">Entry Price</span><span class="val" id="entry">-</span></div>
-            <div class="row"><span class="label">Take Profit (TP1)</span><span class="val tp-color" id="tp1">-</span></div>
-            <div class="row"><span class="label">Stop Loss</span><span class="val sl-color" id="sl">-</span></div>
-            
-            <div class="row" style="border-top: 1px dashed #30363d; padding-top: 12px;">
-                <span class="label">Confidence Score</span><span class="val" id="confidence">-</span>
-            </div>
-            
-            <div class="reason">"<span id="reason">-</span>"</div>
-            
-            <div class="footer" id="session" style="color: #e3b341; font-weight: bold; margin-bottom: 5px;">-</div>
-            <div class="footer" id="time">-</div>
-        </div>
+<div class="app">
+
+  <!-- HOME -->
+  <section class="view on" id="v-home">
+    <h1 class="brand">Keningau<b>AI</b></h1>
+    <p class="sub">Signal XAU/USD · TwelveData</p>
+    <div class="card"><h3>Sesi pasaran (waktu Malaysia)</h3><div id="sessions"></div></div>
+    <div class="card">
+      <h3>Signal terakhir</h3>
+      <div id="lastSignal"><div class="empty">Belum ada signal. Tekan butang di bawah.</div></div>
     </div>
+    <select class="tf" aria-label="Timeframe"><option value="m5">M5</option><option value="m15">M15</option><option value="h1">H1</option><option value="h4">H4</option></select>
+    <button class="btn gen">Jana signal AI</button>
+    <div class="msg"></div><div class="err"></div>
+  </section>
 
-    <script>
-        // Pastikan URL Render anda betul
-        const API_URL = 'https://keningau-ai.onrender.com/api/generate-signal'; 
-        
-        async function mintaSignal() {
-            const btn = document.getElementById('btnSignal');
-            const loading = document.getElementById('loading');
-            const card = document.getElementById('signalCard');
-            const errorBox = document.getElementById('errorBox');
-            
-            btn.disabled = true; btn.innerText = "Sedang Jana...";
-            loading.style.display = 'block'; card.style.display = 'none'; errorBox.style.display = 'none';
+  <!-- SIGNALS -->
+  <section class="view" id="v-signals">
+    <h1 class="brand">Signals</h1>
+    <p class="sub">Setiap signal dipetakan ke sesi semasa, dan sesi tentukan risk:reward.</p>
+    <select class="tf" aria-label="Timeframe"><option value="m5">M5</option><option value="m15">M15</option><option value="h1">H1</option><option value="h4">H4</option></select>
+    <button class="btn gen">Jana signal AI</button>
+    <div class="msg"></div><div class="err"></div>
+    <div class="card" style="margin-top:14px">
+      <h3>Pemetaan signal ikut sesi</h3>
+      <table><thead><tr><th>Sesi</th><th>Waktu MYT</th><th>Risk:reward</th></tr></thead><tbody id="map"></tbody></table>
+      <div class="time">SL ikut zon dan ATR. TP = jarak SL × risk:reward sesi. Ubah di Profile, bahagian Setting.</div>
+    </div>
+    <div class="chips" id="chips"></div>
+    <div id="history"></div>
+  </section>
 
-            try {
-                const response = await fetch(API_URL);
-                const data = await response.json();
-                
-                if (!response.ok || data.error) throw new Error(data.error || "API gagal");
+  <!-- AI TOOLS -->
+  <section class="view" id="v-tools">
+    <h1 class="brand">AI Tools</h1>
+    <p class="sub">Alat tambahan akan masuk di sini.</p>
+    <div class="tools">
+      <div class="tool"><b>Analisis pasaran</b><span>Ringkasan trend XAU/USD. Akan datang.</span></div>
+      <div class="tool"><b>Tutor AI</b><span>Tanya soalan trading. Akan datang.</span></div>
+      <div class="tool"><b>Berita pasaran</b><span>Berita yang gerakkan emas. Akan datang.</span></div>
+      <div class="tool"><b>Simulator</b><span>Latihan dengan wang maya. Akan datang.</span></div>
+    </div>
+  </section>
 
-                loading.style.display = 'none'; card.style.display = 'block';
-                
-                // Masukkan data ke UI
-                document.getElementById('pair').innerText = data.pair;
-                document.getElementById('entry').innerText = data.entry;
-                document.getElementById('tp1').innerText = data.tp1;
-                document.getElementById('sl').innerText = data.stop_loss;
-                document.getElementById('confidence').innerText = data.confidence + " / 100";
-                document.getElementById('reason').innerText = data.reason;
-                
-                // Info Tambahan (Sesi & Masa)
-                document.getElementById('session').innerText = "Sesi Aktif: " + (data.session_active || "UNKNOWN");
-                document.getElementById('time').innerText = "Kemaskini: " + new Date().toLocaleString();
+  <!-- ENJIN -->
+  <section class="view" id="v-engine">
+    <h1 class="brand">Enjin</h1>
+    <p class="sub">Keputusan setiap enjin untuk signal terakhir.</p>
+    <div class="card" id="engWrap"></div>
+    <div class="card">
+      <h3>Apa yang setiap enjin semak</h3>
+      <div class="chk">
+        <div><b>SNR</b>: harga dekat level support/resistance dari swing high dan low.</div>
+        <div><b>SMC</b>: struktur HH + HL (naik) atau LH + LL (turun).</div>
+        <div><b>EMA200</b>: harga di atas atau bawah EMA 200.</div>
+        <div><b>Ichimoku</b>: kedudukan harga pada awan, dan Tenkan lawan Kijun.</div>
+        <div><b>Fibonacci</b>: harga retrace 38% hingga 65% daripada pergerakan 100 candle.</div>
+        <div><b>SND</b>: dekat zon supply/demand yang belum pecah.</div>
+        <div><b>MACD</b>: histogram di atas atau bawah sifar.</div>
+        <div><b>Momentum</b>: perubahan harga 10 candle berbanding ATR.</div>
+      </div>
+    </div>
+  </section>
 
-                // Warna Badge
-                const actionBadge = document.getElementById('action');
-                actionBadge.innerText = data.action;
-                actionBadge.className = data.action === "BUY" ? "badge buy" : "badge sell";
+  <!-- PROFILE -->
+  <section class="view" id="v-profile">
+    <h1 class="brand">Profile</h1>
+    <p class="sub">Tetapan dan sejarah.</p>
+    <div class="card">
+      <h3>Setting</h3>
+      <div class="kv" style="border-top:0"><span>Timeframe lalai</span>
+        <select class="tf inl" aria-label="Timeframe lalai"><option value="m5">M5</option><option value="m15">M15</option><option value="h1">H1</option><option value="h4">H4</option></select></div>
+      <div class="kv"><span>RR sesi Asia (1 : )</span><input class="inp" type="number" step="0.1" min="0.5" max="5" data-rr="ASIA"></div>
+      <div class="kv"><span>RR sesi London (1 : )</span><input class="inp" type="number" step="0.1" min="0.5" max="5" data-rr="LONDON"></div>
+      <div class="kv"><span>RR sesi New York (1 : )</span><input class="inp" type="number" step="0.1" min="0.5" max="5" data-rr="NEW YORK"></div>
+      <div class="kv"><span>RR sesi Overlap (1 : )</span><input class="inp" type="number" step="0.1" min="0.5" max="5" data-rr="OVERLAP"></div>
+      <button class="btn" id="saveSet" style="margin-top:12px">Simpan setting</button>
+      <div class="time" id="setMsg" style="text-align:center"></div>
+    </div>
+    <div class="card">
+      <h3>Statistik</h3>
+      <div class="kv" style="border-top:0"><span>Signal dijana</span><b id="stCount">0</b></div>
+      <div class="kv"><span>Signal BUY / SELL</span><b id="stSplit">0 / 0</b></div>
+    </div>
+    <button class="btn ghost" id="clear">Padam sejarah signal</button>
+    <p class="time" style="text-align:center;margin-top:18px">Signal dijana AI dan bukan nasihat pelaburan. Uji di akaun demo dahulu.</p>
+  </section>
+</div>
 
-            } catch (error) {
-                loading.style.display = 'none';
-                errorBox.style.display = 'block';
-                errorBox.innerText = "Ralat Sistem: " + error.message;
-            } finally {
-                btn.disabled = false; btn.innerText = "Jana Signal AI";
-            }
-        }
-    </script>
+<nav><div>
+  <button data-v="home" class="on"><svg viewBox="0 0 24 24"><path d="M3 11l9-8 9 8M5 10v10h14V10"/></svg>Home</button>
+  <button data-v="signals"><svg viewBox="0 0 24 24"><path d="M6 4v16M6 8h-2v6h2M12 2v18M12 6h-2v8h2M18 7v13M18 10h-2v6h2"/></svg>Signals</button>
+  <button data-v="tools"><svg viewBox="0 0 24 24"><path d="M12 3l2 5 5 2-5 2-2 5-2-5-5-2 5-2z"/></svg>AI Tools</button>
+  <button data-v="engine"><svg viewBox="0 0 24 24"><rect x="6" y="6" width="12" height="12" rx="2"/><path d="M9 2v4M15 2v4M9 18v4M15 18v4M2 9h4M2 15h4M18 9h4M18 15h4"/></svg>Enjin</button>
+  <button data-v="profile"><svg viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0116 0"/></svg>Profile</button>
+</div></nav>
+
+<script>
+const API_URL = 'https://keningau-ai.onrender.com/api/generate-signal';
+const KEY = 'keningau_signals';
+
+/* Pemetaan sesi signal. Mesti sama dengan getActiveSession() di server.js */
+const MAP = [
+  {name:'ASIA',     rng:'7AM–3PM', rr:1},
+  {name:'LONDON',   rng:'3PM–8PM', rr:1.5},
+  {name:'NEW YORK', rng:'8PM–2AM', rr:2},
+  {name:'OVERLAP',  rng:'2AM–7AM', rr:1.5}
+];
+function mapSession(h){
+  if(h>=7&&h<15) return MAP[0];
+  if(h>=15&&h<20) return MAP[1];
+  if(h>=20||h<2) return MAP[2];
+  return MAP[3];
+}
+
+/* Setting disimpan dalam browser */
+const SKEY = 'keningau_settings';
+let SET = {};
+try{ SET = JSON.parse(localStorage.getItem(SKEY)) || {}; }catch(e){}
+if(SET.rr) MAP.forEach(m=>{ if(SET.rr[m.name] >= 0.5) m.rr = +SET.rr[m.name]; });
+
+/* Sesi pasaran (waktu Malaysia). e > 24 bermaksud sambung ke hari esok */
+const MKT = [
+  {n:'Sydney',s:5,e:14},{n:'Tokyo',s:8,e:17},{n:'London',s:15,e:24},{n:'New York',s:20,e:29}
+];
+const pad = n => { const h = n%24; return (h%12||12) + (h<12 ? 'AM' : 'PM'); };
+const fmtT = ts => new Date(ts).toLocaleString('en-GB',{day:'numeric',month:'short',hour:'numeric',minute:'2-digit',hour12:true});
+const myt = ms => new Date(ms + 8*3600e3);
+function closedWeekend(ms){
+  const d = myt(ms), day = d.getUTCDay(), h = d.getUTCHours();
+  return (day===6&&h>=5) || day===0 || (day===1&&h<5);
+}
+function isOpen(s, ms){
+  if(closedWeekend(ms)) return false;
+  const d = myt(ms), h = d.getUTCHours() + d.getUTCMinutes()/60;
+  return (h>=s.s && h<s.e) || (s.e>24 && h < s.e-24);
+}
+function nextChange(s, ms){
+  const st = isOpen(s, ms);
+  for(let t = ms+300000; t < ms+8*864e5; t += 300000){
+    if(isOpen(s, t) !== st) return t - ms;
+  }
+  return 0;
+}
+function dur(ms){
+  const m = Math.round(ms/60000), h = Math.floor(m/60);
+  return h>0 ? h+'j '+(m%60)+'m' : m+'m';
+}
+function renderSessions(){
+  const now = Date.now();
+  document.getElementById('sessions').innerHTML = MKT.map(s=>{
+    const o = isOpen(s, now), left = dur(nextChange(s, now));
+    return `<div class="srow"><span>${s.n}<small>${pad(s.s)}–${pad(s.e)}</small></span>`+
+      (o ? `<span class="open"><i class="dot"></i>Buka · tutup ${left}</span>` : `<span class="shut">Buka dalam ${left}</span>`)+`</div>`;
+  }).join('');
+  const cur = mapSession(myt(now).getUTCHours()).name;
+  document.getElementById('map').innerHTML = MAP.map(m=>
+    `<tr class="${m.name===cur?'now':''}"><td>${m.name}</td><td>${m.rng}</td><td>1 : ${m.rr}</td></tr>`).join('');
+}
+
+/* Sejarah signal. Disimpan dalam browser (localStorage) */
+function load(){ try{ return JSON.parse(localStorage.getItem(KEY)) || []; }catch(e){ return []; } }
+function save(a){ try{ localStorage.setItem(KEY, JSON.stringify(a.slice(0,40))); }catch(e){} }
+let history = load();
+
+function valid(s){
+  const e=+s.entry, tp=+s.tp1, sl=+s.stop_loss;
+  return s.action==='BUY' ? (tp>e && sl<e) : s.action==='SELL' ? (tp<e && sl>e) : false;
+}
+function allText(s){
+  const lim = s.price && Math.abs(s.price - s.entry) > 0.05;
+  return `${s.action}${lim?' LIMIT':''} XAUUSD ${s.tf||''}\nEntry ${s.entry}\nSL ${s.stop_loss}\nTP ${s.tp1}`;
+}
+function sigCard(s, idx = 0){
+  const p = x => Math.round(Math.abs(x - s.entry)*10);
+  const ok = valid(s), lim = s.price && Math.abs(s.price - s.entry) > 0.05;
+  const cp = (v) => `<button class="cp" data-v="${v}">Salin</button>`;
+  const plan = (s.mapping||[]).map(m=>`<tr class="${m.name===s.session?'now':''}"><td>${m.name}</td><td>1 : ${m.rr}</td><td><button class="cp" data-v="${m.tp}" style="margin:0">${m.tp}</button></td><td>+${p(m.tp)}</td></tr>`).join('');
+  return `<div class="card">
+    <div class="sig-h"><h3>${s.pair}</h3><span class="badge ${s.action}">${s.action}${lim?' LIMIT':''}</span></div>
+    <div class="tags"><span class="tag">${s.tf||'H1'}</span>${s.status?`<span class="tag ${s.status==='SIAP'?'go':'wait'}">${s.status==='SIAP'?'Siap entry':'Tunggu syarat'}</span>`:''}<span class="tag ses">Sesi ${s.session}</span>${ok?'':'<span class="tag bad">TP/SL tidak sah, jangan guna</span>'}</div>
+    <div class="kv"><span>${lim?'Entry (pasang limit)':'Entry'}</span><span><b>${s.entry}</b>${cp(s.entry)}</span></div>
+    ${lim?`<div class="kv"><span>Harga semasa</span><b>${s.price}</b></div>`:''}
+    <div class="kv"><span>Stop loss <small class="sl">-${p(s.stop_loss)} pips</small></span><span><b class="sl">${s.stop_loss}</b>${cp(s.stop_loss)}</span></div>
+    <div class="kv"><span>Take profit sesi ${s.session} <small class="tp">+${p(s.tp1)} pips</small></span><span><b class="tp">${s.tp1}</b>${cp(s.tp1)}</span></div>
+    ${plan?`<table style="margin-top:10px"><thead><tr><th>TP ikut sesi</th><th>RR</th><th>TP (tekan salin)</th><th>Pips</th></tr></thead><tbody>${plan}</tbody></table>`:''}
+    <button class="cp all" data-i="${idx}">Salin semua (entry, SL, TP)</button>
+    <div class="time">${fmtT(s.ts)}</div>
+  </div>`;
+}
+function copyTxt(t, b){
+  const done = () => { const o = b.innerText; b.classList.add('ok'); b.innerText = 'Disalin'; setTimeout(()=>{ b.classList.remove('ok'); b.innerText = o; }, 1200); };
+  const fb = () => { const a = document.createElement('textarea'); a.value = t; a.style.cssText = 'position:fixed;opacity:0'; document.body.appendChild(a); a.select(); try{ document.execCommand('copy'); done(); }catch(e){} a.remove(); };
+  if(navigator.clipboard && window.isSecureContext) navigator.clipboard.writeText(t).then(done).catch(fb); else fb();
+}
+document.addEventListener('click', e => {
+  const b = e.target.closest('.cp'); if(!b) return;
+  copyTxt(b.dataset.v !== undefined ? b.dataset.v : allText(history[+b.dataset.i]), b);
+});
+
+/* Tapis ikut sesi */
+let filt = 'ALL';
+function renderChips(){
+  const names = ['ALL', ...MAP.map(m=>m.name)], label = {ALL:'Semua'};
+  document.getElementById('chips').innerHTML = names.map(n=>{
+    const c = n==='ALL' ? history.length : history.filter(s=>s.session===n).length;
+    return `<button class="chip ${n===filt?'on':''}" data-f="${n}">${label[n]||n} (${c})</button>`;
+  }).join('');
+}
+document.getElementById('chips').addEventListener('click', e => {
+  const b = e.target.closest('.chip'); if(!b) return;
+  filt = b.dataset.f; renderAll();
+});
+function renderEngines(){
+  const w = document.getElementById('engWrap'), s = history[0];
+  if(!s || !s.engines || !s.engines.length){ w.innerHTML = '<div class="empty">Belum ada keputusan enjin. Jana signal dahulu.</div>'; return; }
+  const up = s.engines.filter(e=>e.v>0).length, dn = s.engines.filter(e=>e.v<0).length;
+  w.innerHTML = `<div class="sig-h"><h3>${s.pair} · ${s.tf||''}</h3><span class="badge ${s.action}">${s.action}</span></div>
+    <div class="tags"><span class="tag go">${up} naik</span><span class="tag bad">${dn} turun</span><span class="tag">${s.engines.length-up-dn} neutral</span></div>
+    <div class="eng">${s.engines.map(e=>`<div class="e ${e.v>0?'u':e.v<0?'d':'z'}"><b>${e.n} ${e.v>0?'▲':e.v<0?'▼':'–'}</b><span>${e.note}</span></div>`).join('')}</div>
+    <div class="chk">${(s.checks||[]).map(k=>`<div class="${k.ok?'y':'n'}">${k.ok?'✓':'✗'} ${k.t}</div>`).join('')}</div>
+    <div class="time">${fmtT(s.ts)}</div>`;
+}
+function renderAll(){
+  renderSessions();
+  document.getElementById('lastSignal').innerHTML = history.length ? sigCard(history[0]).replace('class="card"','') : '<div class="empty">Belum ada signal. Tekan butang di bawah.</div>';
+  renderChips();
+  const list = history.map((s,i)=>({s,i})).filter(x=>filt==='ALL'||x.s.session===filt);
+  document.getElementById('history').innerHTML = list.length ? list.map(x=>sigCard(x.s,x.i)).join('') : '<div class="card"><div class="empty">'+(history.length?'Tiada signal untuk sesi ini.':'Sejarah kosong. Jana signal pertama anda.')+'</div></div>';
+  renderEngines();
+  document.getElementById('stCount').innerText = history.length;
+  const b = history.filter(s=>s.action==='BUY').length;
+  document.getElementById('stSplit').innerText = b+' / '+(history.length-b);
+}
+
+/* Jana signal */
+async function generate(){
+  const btns = document.querySelectorAll('.gen'), msgs = document.querySelectorAll('.msg'), errs = document.querySelectorAll('.err');
+  btns.forEach(b=>{b.disabled=true;b.innerText='Sedang jana...';});
+  msgs.forEach(m=>{m.style.display='block';m.innerText='AI sedang menganalisis pasaran. Render mungkin ambil 30 saat kalau baru bangun.';});
+  errs.forEach(e=>e.style.display='none');
+  const ctl = new AbortController(), to = setTimeout(()=>ctl.abort(), 90000);
+  try{
+    const r = await fetch(API_URL + '?tf=' + document.querySelector('.tf').value + '&rr=' + MAP.map(m=>m.rr).join(','), {signal: ctl.signal});
+    const d = await r.json();
+    if(!r.ok || d.error) throw new Error(d.error || 'API gagal');
+    history.unshift({pair:d.pair, action:d.action, entry:+d.entry, tp1:+d.tp1, stop_loss:+d.stop_loss,
+      confidence:+d.confidence, reason:d.reason, session:d.session_active || 'UNKNOWN', ts:Date.now(),
+      tf:d.tf, price:d.price, mapping:d.mapping||[], status:d.status, htf:d.htf_bias, atr:d.atr, engines:d.engines||[], checks:d.checks||[]});
+    save(history); renderAll();
+  }catch(e){
+    errs.forEach(x=>{x.style.display='block';x.innerText='Ralat: '+(e.name==='AbortError'?'Server terlalu lama membalas. Cuba lagi.':e.message);});
+  }finally{
+    clearTimeout(to);
+    btns.forEach(b=>{b.disabled=false;b.innerText='Jana signal AI';});
+    msgs.forEach(m=>m.style.display='none');
+  }
+}
+
+/* Navigasi bawah */
+document.querySelectorAll('nav button').forEach(b=>b.addEventListener('click',()=>{
+  document.querySelectorAll('nav button').forEach(x=>x.classList.toggle('on',x===b));
+  document.querySelectorAll('.view').forEach(v=>v.classList.toggle('on',v.id==='v-'+b.dataset.v));
+  window.scrollTo(0,0);
+}));
+document.querySelectorAll('.gen').forEach(b=>b.addEventListener('click',generate));
+document.getElementById('clear').addEventListener('click',()=>{ if(confirm('Padam semua sejarah signal?')){ history=[]; save(history); renderAll(); } });
+
+document.querySelectorAll('.tf').forEach(t=>t.addEventListener('change',()=>document.querySelectorAll('.tf').forEach(x=>x.value=t.value)));
+document.querySelectorAll('.tf').forEach(x=>x.value = SET.tf || 'm15');
+document.querySelectorAll('[data-rr]').forEach(i=>i.value = MAP.find(m=>m.name===i.dataset.rr).rr);
+document.getElementById('saveSet').addEventListener('click',()=>{
+  const rr = {}; let bad = false;
+  document.querySelectorAll('[data-rr]').forEach(i=>{ const v = parseFloat(i.value); if(!(v>=0.5 && v<=5)) bad = true; rr[i.dataset.rr] = v; });
+  const msg = document.getElementById('setMsg');
+  if(bad){ msg.style.color = 'var(--sell)'; msg.innerText = 'RR mesti antara 0.5 dan 5.'; return; }
+  MAP.forEach(m=>m.rr = rr[m.name]);
+  SET = {tf: document.querySelector('.tf').value, rr};
+  try{ localStorage.setItem(SKEY, JSON.stringify(SET)); }catch(e){}
+  renderAll(); msg.style.color = 'var(--ac)'; msg.innerText = 'Setting disimpan. Berkuat kuasa pada signal seterusnya.';
+});
+renderAll();
+setInterval(renderSessions, 30000);
+</script>
 </body>
 </html>

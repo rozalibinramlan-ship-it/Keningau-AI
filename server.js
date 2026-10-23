@@ -11,132 +11,193 @@ const TD_KEYS = [
     process.env.TWELVEDATA_API_KEY_3
 ].filter(Boolean);
 
-const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
+// timeframe utama -> interval TwelveData, dan timeframe atas untuk bias
+const TF = { m5: { i: "5min", h: "1h" }, m15: { i: "15min", h: "1h" }, h1: { i: "1h", h: "4h" }, h4: { i: "4h", h: "1day" } };
+const SESSION_RR = { "ASIA": 1, "LONDON": 1.5, "NEW YORK": 2, "OVERLAP": 1.5 };
 
-// Model Gemini yang masih hidup. Model 1.5 dan gemini-pro sudah dimatikan.
-// "gemini-flash-latest" ialah alias yang ikut model Flash terkini.
-const MODELS_TO_TRY = [
-    "gemini-3.8-flash",
-    "gemini-3.7-flash",
-    "gemini-3.6-flash",
-    "gemini-flash-latest"
-];
-
-function getActiveSession() {
-    const now = new Date();
-    const mytHour = parseInt(
-        now.toLocaleString("en-US", { timeZone: "Asia/Kuala_Lumpur", hour: '2-digit', hour12: false })
-    );
-    if (mytHour >= 7 && mytHour < 15) return { name: "ASIA", tp: 8, sl: 10 };
-    if (mytHour >= 15 && mytHour < 20) return { name: "LONDON", tp: 15, sl: 12 };
-    if (mytHour >= 20 || mytHour < 2) return { name: "NEW YORK", tp: 25, sl: 18 };
-    return { name: "OVERLAP", tp: 20, sl: 15 };
+const NAMES = ["ASIA", "LONDON", "NEW YORK", "OVERLAP"];
+function parseRR(q) { // ?rr=1,1.5,2,1.5 ikut susunan NAMES
+    const m = { ...SESSION_RR };
+    if (q) String(q).split(',').forEach((v, i) => { const x = parseFloat(v); if (NAMES[i] && x >= 0.5 && x <= 5) m[NAMES[i]] = x; });
+    return m;
+}
+function getActiveSession(map) {
+    const mytHour = parseInt(new Date().toLocaleString("en-US", { timeZone: "Asia/Kuala_Lumpur", hour: '2-digit', hour12: false }));
+    let name = "OVERLAP";
+    if (mytHour >= 7 && mytHour < 15) name = "ASIA";
+    else if (mytHour >= 15 && mytHour < 20) name = "LONDON";
+    else if (mytHour >= 20 || mytHour < 2) name = "NEW YORK";
+    return { name, rr: map[name], map };
 }
 
-async function getMarketData(symbol) {
-    for (let key of TD_KEYS) {
+/* ---------- Data ---------- */
+const cache = {};
+async function getCandles(interval, n) {
+    const c = cache[interval];
+    if (c && Date.now() - c.t < 60000) return c.d; // cache 60s, jimat kuota
+    for (const key of TD_KEYS) {
         try {
-            const r = await fetch(
-                `https://api.twelvedata.com/time_series?symbol=${symbol}&interval=1h&outputsize=10&apikey=${key}`
-            );
+            const r = await fetch(`https://api.twelvedata.com/time_series?symbol=XAU/USD&interval=${interval}&outputsize=${n}&apikey=${key}`);
             const d = await r.json();
             if (d.values) {
-                const closes = d.values.map(v => parseFloat(v.close));
-                return { latestPrice: closes[0], history: [...closes].reverse() };
+                const cs = d.values.map(v => ({ o: +v.open, h: +v.high, l: +v.low, c: +v.close })).reverse(); // lama -> baru
+                cache[interval] = { t: Date.now(), d: cs };
+                return cs;
             }
         } catch (e) {}
     }
     throw new Error("TwelveData limit atau API Key tak sah");
 }
 
-const sleep = (ms) => new Promise(r => setTimeout(r, ms));
-
-// Ralat sementara (server sibuk / had kadar) -> patut cuba semula
-function isBusyError(data, status) {
-    const m = (data?.error?.message || "").toLowerCase();
-    return status === 503 || status === 429 || m.includes("high demand") || m.includes("overloaded") || m.includes("try again");
+/* ---------- Indikator ---------- */
+const ema = (a, p) => { const k = 2 / (p + 1); let e = a[0]; return a.map((v, i) => i ? (e = v * k + e * (1 - k)) : e); };
+function rsi(c, p = 14) {
+    let g = 0, l = 0;
+    for (let i = 1; i <= p; i++) { const d = c[i] - c[i - 1]; d >= 0 ? g += d : l -= d; }
+    g /= p; l /= p;
+    for (let i = p + 1; i < c.length; i++) { const d = c[i] - c[i - 1]; g = (g * (p - 1) + Math.max(d, 0)) / p; l = (l * (p - 1) + Math.max(-d, 0)) / p; }
+    return l === 0 ? 100 : 100 - 100 / (1 + g / l);
 }
-
-async function askGemini(prompt) {
-    let lastError = "";
-    const ATTEMPTS_PER_MODEL = 2;
-
-    for (let modelName of MODELS_TO_TRY) {
-        for (let attempt = 1; attempt <= ATTEMPTS_PER_MODEL; attempt++) {
-            try {
-                console.log(`Cuba guna model: ${modelName} (percubaan ${attempt})...`);
-
-                const url = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${GEMINI_API_KEY}`;
-
-                const response = await fetch(url, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        contents: [{ parts: [{ text: prompt }] }],
-                        generationConfig: { responseMimeType: "application/json" }
-                    })
-                });
-
-                const data = await response.json();
-                const text = data?.candidates?.[0]?.content?.parts?.[0]?.text;
-
-                if (!data.error && text) {
-                    console.log(`Berjaya guna model: ${modelName}`);
-                    return text;
-                }
-
-                const msg = data.error?.message || "Respons kosong atau disekat";
-                console.log(`Model ${modelName} gagal: ${msg}`);
-
-                // Sibuk: tunggu sekejap, cuba model sama sekali lagi
-                if (isBusyError(data, response.status) && attempt < ATTEMPTS_PER_MODEL) {
-                    await sleep(1500);
-                    continue;
-                }
-
-                lastError += `[${modelName}] ${msg} | `;
-                break; // pergi ke model seterusnya
-            } catch (err) {
-                console.log(`Model ${modelName} ralat: ${err.message}`);
-                lastError += `[${modelName}] ${err.message} | `;
-                break;
-            }
-        }
+function atr(cs, p = 14) {
+    const tr = cs.slice(1).map((x, i) => Math.max(x.h - x.l, Math.abs(x.h - cs[i].c), Math.abs(x.l - cs[i].c)));
+    let a = tr.slice(0, p).reduce((s, v) => s + v, 0) / p;
+    for (let i = p; i < tr.length; i++) a = (a * (p - 1) + tr[i]) / p;
+    return a;
+}
+function macdHist(c) {
+    const a = ema(c, 12), b = ema(c, 26), m = a.map((v, i) => v - b[i]), s = ema(m, 9);
+    return m[m.length - 1] - s[s.length - 1];
+}
+function swings(cs, k = 3) {
+    const highs = [], lows = [];
+    for (let i = k; i < cs.length - k; i++) {
+        const w = cs.slice(i - k, i + k + 1);
+        if (cs[i].h === Math.max(...w.map(x => x.h))) highs.push({ i, p: cs[i].h });
+        if (cs[i].l === Math.min(...w.map(x => x.l))) lows.push({ i, p: cs[i].l });
     }
-
-    throw new Error("Gagal. Ralat: " + lastError);
+    return { highs, lows };
 }
+function levels(sw, A) { // kluster level SNR
+    const all = [...sw.highs, ...sw.lows].map(x => x.p).sort((a, b) => a - b), cl = [];
+    for (const p of all) {
+        const g = cl[cl.length - 1];
+        if (g && p - g.max <= 0.5 * A) { g.max = p; g.sum += p; g.n++; } else cl.push({ max: p, sum: p, n: 1 });
+    }
+    return cl.map(g => ({ p: g.sum / g.n, n: g.n }));
+}
+function zonesSND(cs, A) { // zon supply/demand dari candle impuls
+    const z = [];
+    for (let i = Math.max(1, cs.length - 120); i < cs.length - 1; i++) {
+        const body = cs[i].c - cs[i].o;
+        if (Math.abs(body) >= 1.5 * A) z.push({ t: body > 0 ? 'demand' : 'supply', lo: cs[i - 1].l, hi: cs[i - 1].h, i });
+    }
+    return z.filter(q => !cs.slice(q.i + 1).some(x => q.t === 'demand' ? x.c < q.lo : x.c > q.hi)); // buang zon yang sudah pecah
+}
+const zdist = (z, price) => price > z.hi ? price - z.hi : price < z.lo ? z.lo - price : 0;
+
+/* ---------- Enjin analisis ---------- */
+function analyze(cs, hcs, session) {
+    const n = cs.length, c = cs.map(x => x.c), price = c[n - 1], A = atr(cs), R = rsi(c);
+    const f = x => x.toFixed(2);
+    const E = []; // {n, v (+1/-1/0), note}
+
+    const e200 = n >= 200 ? ema(c, 200)[n - 1] : null;
+    const sw = swings(cs), lv = levels(sw, A);
+    const sup = lv.filter(x => x.p <= price && x.n >= 2).sort((a, b) => b.p - a.p)[0];
+    const res = lv.filter(x => x.p > price && x.n >= 2).sort((a, b) => a.p - b.p)[0];
+    const ds = sup ? price - sup.p : 1e9, dr = res ? res.p - price : 1e9;
+    if (Math.min(ds, dr) <= 0.6 * A) E.push(ds <= dr ? { n: 'SNR', v: 1, note: 'Dekat support ' + f(sup.p) } : { n: 'SNR', v: -1, note: 'Dekat resistance ' + f(res.p) });
+    else E.push({ n: 'SNR', v: 0, note: 'Tiada level dekat' });
+
+    const H = sw.highs.slice(-2), L = sw.lows.slice(-2);
+    let smc = { n: 'SMC', v: 0, note: 'Struktur bercampur' };
+    if (H.length === 2 && L.length === 2) {
+        if (H[1].p > H[0].p && L[1].p > L[0].p) smc = { n: 'SMC', v: 1, note: 'HH + HL (naik)' };
+        else if (H[1].p < H[0].p && L[1].p < L[0].p) smc = { n: 'SMC', v: -1, note: 'LH + LL (turun)' };
+    }
+    E.push(smc);
+
+    E.push(e200 === null ? { n: 'EMA200', v: 0, note: 'Data tak cukup' } : { n: 'EMA200', v: price > e200 ? 1 : -1, note: (price > e200 ? 'Atas ' : 'Bawah ') + f(e200) });
+
+    if (n >= 80) {
+        const mid = (len, i) => { const s = cs.slice(i - len + 1, i + 1); return (Math.max(...s.map(x => x.h)) + Math.min(...s.map(x => x.l))) / 2; };
+        const tk = mid(9, n - 1), kj = mid(26, n - 1), ci = n - 27;
+        const top = Math.max((mid(9, ci) + mid(26, ci)) / 2, mid(52, ci)), bot = Math.min((mid(9, ci) + mid(26, ci)) / 2, mid(52, ci));
+        if (price > top && tk > kj) E.push({ n: 'ICHIMOKU', v: 1, note: 'Atas awan, TK > KJ' });
+        else if (price < bot && tk < kj) E.push({ n: 'ICHIMOKU', v: -1, note: 'Bawah awan, TK < KJ' });
+        else E.push({ n: 'ICHIMOKU', v: 0, note: 'Dalam awan / bercampur' });
+    } else E.push({ n: 'ICHIMOKU', v: 0, note: 'Data tak cukup' });
+
+    const seg = cs.slice(-100), HI = Math.max(...seg.map(x => x.h)), LO = Math.min(...seg.map(x => x.l));
+    const up = seg.findIndex(x => x.l === LO) < seg.findIndex(x => x.h === HI), ret = (up ? HI - price : price - LO) / (HI - LO || 1);
+    E.push(ret >= 0.382 && ret <= 0.65 ? { n: 'FIBONACCI', v: up ? 1 : -1, note: 'Retrace ' + Math.round(ret * 100) + '%' } : { n: 'FIBONACCI', v: 0, note: 'Luar zon 38-65%' });
+
+    const zs = zonesSND(cs, A), near = zs.map(z => ({ z, d: zdist(z, price) })).sort((a, b) => a.d - b.d)[0];
+    E.push(near && near.d <= 0.6 * A ? { n: 'SND', v: near.z.t === 'demand' ? 1 : -1, note: (near.z.t === 'demand' ? 'Zon demand ' : 'Zon supply ') + f(near.z.lo) + '-' + f(near.z.hi) } : { n: 'SND', v: 0, note: 'Jauh dari zon' });
+
+    const mh = macdHist(c);
+    E.push({ n: 'MACD', v: mh > 0 ? 1 : -1, note: 'Histogram ' + (mh > 0 ? '+' : '') + mh.toFixed(2) });
+    const mv = price - c[n - 11];
+    E.push(Math.abs(mv) >= 0.5 * A ? { n: 'MOMENTUM', v: mv > 0 ? 1 : -1, note: 'RSI ' + R.toFixed(0) } : { n: 'MOMENTUM', v: 0, note: 'Lemah, RSI ' + R.toFixed(0) });
+
+    // bias timeframe atas
+    const hc = hcs.map(x => x.c), hp = hc[hc.length - 1];
+    const hb = hp > ema(hc, 50)[hc.length - 1] ? 1 : -1;
+
+    // arah
+    const sum = E.reduce((s, e) => s + e.v, 0);
+    const dir = sum >= 1 ? 1 : sum <= -1 ? -1 : hb;
+    const agree = E.filter(e => e.v === dir).length, opp = E.filter(e => e.v === -dir).length;
+
+    // zon entry
+    const zt = dir === 1 ? 'demand' : 'supply';
+    const zone = zs.filter(q => q.t === zt && (dir === 1 ? q.hi <= price + 0.2 * A : q.lo >= price - 0.2 * A))
+        .sort((a, b) => zdist(a, price) - zdist(b, price))[0];
+    const entry = zone ? (dir === 1 ? Math.min(price, zone.hi) : Math.max(price, zone.lo)) : price;
+    let slDist = zone ? Math.abs(entry - (dir === 1 ? zone.lo - 0.25 * A : zone.hi + 0.25 * A)) : 1.2 * A;
+    slDist = Math.min(2 * A, Math.max(0.8 * A, slDist));
+    const sl = entry - dir * slDist, tp = entry + dir * slDist * session.rr;
+
+    const checks = [
+        { t: 'Harga dekat zon entry', ok: Math.abs(price - entry) <= 0.5 * A },
+        { t: 'Bias ' + (hb === 1 ? 'naik' : 'turun') + ' timeframe atas sejajar', ok: hb === dir },
+        { t: 'Majoriti enjin setuju (' + agree + '/' + E.length + ')', ok: agree >= 4 && agree > opp },
+        { t: 'Struktur SMC tidak melawan', ok: smc.v !== -dir }
+    ];
+    const fails = checks.filter(k => !k.ok).length;
+    const confidence = Math.max(30, Math.min(95, Math.round(40 + 60 * agree / E.length - 8 * fails)));
+    const action = dir === 1 ? 'BUY' : 'SELL';
+    // TP untuk setiap sesi: entry dan SL sama, TP ikut risk:reward sesi
+    const mapping = NAMES.map(name => ({ name, rr: session.map[name], tp: +f(entry + dir * slDist * session.map[name]) }));
+    return {
+        pair: 'XAU/USD', action, entry: +f(entry), tp1: +f(tp), stop_loss: +f(sl), confidence,
+        status: fails === 0 ? 'SIAP' : 'TUNGGU', price: +f(price), atr: +f(A), htf_bias: hb === 1 ? 'bull' : 'bear',
+        rr: session.rr, mapping, engines: E, checks, zone: zone ? { t: zone.t, lo: +f(zone.lo), hi: +f(zone.hi) } : null,
+        reason: `${agree}/${E.length} enjin setuju ${action}. Bias timeframe atas ${hb === 1 ? 'naik' : 'turun'}. ` +
+            (zone ? `Zon ${zt} ${f(zone.lo)}-${f(zone.hi)}.` : 'Tiada zon jelas, entry harga semasa.') + (fails ? ' Belum semua syarat lepas, tunggu.' : '')
+    };
+}
+
+app.get('/health', (req, res) => res.status(200).send('OK'));
 
 app.get('/api/generate-signal', async (req, res) => {
     try {
-        if (!GEMINI_API_KEY) throw new Error("GEMINI_API_KEY belum diset");
-
-        const m = await getMarketData("XAU/USD");
-        const session = getActiveSession();
-
-        const prompt = `
-        Pair: XAU/USD. Price: ${m.latestPrice}. History: ${m.history.join(', ')}. Session: ${session.name}.
-        Reply ONLY JSON: {"pair":"XAU/USD","action":"BUY" or "SELL","entry":${m.latestPrice},"tp1":0,"stop_loss":0,"confidence":85,"reason":"Short reason"}
-        If BUY: tp1 roughly Entry+${session.tp}, sl roughly Entry-${session.sl}.
-        If SELL: tp1 roughly Entry-${session.tp}, sl roughly Entry+${session.sl}.
-        `;
-
-        let text = await askGemini(prompt);
-
-        // Bersihkan markdown dan cari JSON
-        text = text.replace(/```json|```/g, '').trim();
-        const jsonMatch = text.match(/\{[\s\S]*\}/);
-        if (jsonMatch) text = jsonMatch[0];
-
-        const signalData = JSON.parse(text);
-        signalData.session_active = session.name;
-
-        res.json(signalData);
+        const tf = TF[req.query.tf] ? req.query.tf : 'm15';
+        const [cs, hcs] = await Promise.all([getCandles(TF[tf].i, 300), getCandles(TF[tf].h, 120)]);
+        if (cs.length < 60) throw new Error("Data candle tak cukup");
+        const session = getActiveSession(parseRR(req.query.rr));
+        const sig = analyze(cs, hcs, session);
+        sig.tf = tf.toUpperCase();
+        sig.session_active = session.name;
+        res.json(sig);
     } catch (e) {
         console.error(e.message);
         res.status(500).json({ error: e.message });
     }
 });
 
-const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => console.log("Server berjalan di port " + PORT));
+module.exports = { analyze };
+if (require.main === module) {
+    const PORT = process.env.PORT || 3000;
+    app.listen(PORT, () => console.log("Server berjalan di port " + PORT));
+}
