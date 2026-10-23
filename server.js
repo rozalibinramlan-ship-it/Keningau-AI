@@ -12,11 +12,11 @@ const TD_KEYS = [
     process.env.TWELVEDATA_API_KEY_3
 ].filter(Boolean);
 
-// 2. Senarai Model AI Groq (Diringkaskan)
-const GROQ_MODELS = [
-    "llama-3.3-70b-versatile",
-    "llama-3.1-8b-instant"
-];
+// 2. Senarai API Keys Gemini (Fallback System)
+const GEMINI_KEYS = [
+    process.env.GEMINI_API_KEY,
+    process.env.GEMINI_API_KEY_2
+].filter(Boolean);
 
 // 3. Mapping Sesi Pasaran (Masa Malaysia - MYT)
 function getActiveSession() {
@@ -60,7 +60,7 @@ app.get('/api/generate-signal', async (req, res) => {
         Recent History (Old to New): ${m.history.join(', ')}.
         Current Market Session: ${session.name} (${session.desc}).
         
-        Analyze the trend. Reply ONLY JSON format, no other text:
+        Analyze the trend. Reply ONLY JSON format:
         {"pair":"XAU/USD","action":"BUY" or "SELL","entry":${m.latestPrice},"tp1":0,"stop_loss":0,"confidence":85,"reason":"Short reason here"}
         
         RULES:
@@ -72,55 +72,62 @@ app.get('/api/generate-signal', async (req, res) => {
         let success = false;
         let lastError = "";
 
-        // --- SISTEM MAPPING MODEL AI (FALLBACK) ---
-        for (let modelName of GROQ_MODELS) {
-            try {
-                console.log(`Cuba guna model: ${modelName}...`);
-                
-                const response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
-                    method: 'POST',
-                    headers: {
-                        'Authorization': `Bearer ${process.env.GROQ_API_KEY}`,
-                        'Content-Type': 'application/json'
-                    },
-                    body: JSON.stringify({
-                        model: modelName,
-                        messages: [{ role: "user", content: prompt }],
-                        temperature: 0.3 
-                        // response_format dibuang sementara untuk ujian
-                    })
-                });
+        const GEMINI_MODELS = ["gemini-1.5-flash", "gemini-1.5-pro", "gemini-pro"];
 
-                const data = await response.json();
+        // --- GELUNG UNTUK API KEY ---
+        for (let apiKey of GEMINI_KEYS) {
+            if (success) break; // Berhenti jika dah berjaya
+            
+            // --- GELUNG UNTUK MODEL ---
+            for (let modelName of GEMINI_MODELS) {
+                try {
+                    console.log(`Cuba guna model: ${modelName} (Key: ...${apiKey.slice(-4)})...`);
+                    
+                    const url = `https://generativelanguage.googleapis.com/v1/models/${modelName}:generateContent?key=${apiKey}`;
+                    
+                    const response = await fetch(url, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            contents: [{ parts: [{ text: prompt }] }],
+                            generationConfig: {
+                                responseMimeType: "application/json"
+                            }
+                        })
+                    });
 
-                if (data.error) {
-                    console.log(`Model ${modelName} gagal: ${data.error.message}`);
-                    lastError = data.error.message;
-                    continue; 
+                    const data = await response.json();
+
+                    if (data.error) {
+                        console.log(`Model ${modelName} gagal: ${data.error.message}`);
+                        lastError = data.error.message;
+                        
+                        // Jika ralat adalah kerana Quota/Limit API Key, kita terus tukar ke API Key seterusnya
+                        if (data.error.message.includes("Quota") || data.error.message.includes("limit") || data.error.message.includes("exhausted")) {
+                            console.log("API Key ini dah limit. Tukar ke Key seterusnya...");
+                            break; // Keluar dari gelung model, masuk ke gelung API Key seterusnya
+                        }
+                        continue; // Jika ralat model (cth: 404), cuba model lain dengan key yang sama
+                    }
+
+                    text = data.candidates[0].content.parts[0].text;
+                    success = true;
+                    console.log(`Berjaya guna model: ${modelName}`);
+                    break; 
+
+                } catch (err) {
+                    console.log(`Ralat rangkaian: ${err.message}`);
+                    lastError = err.message;
                 }
-
-                text = data.choices[0].message.content;
-                success = true;
-                console.log(`Berjaya guna model: ${modelName}`);
-                break; 
-
-            } catch (err) {
-                console.log(`Ralat rangkaian pada model ${modelName}`);
-                lastError = err.message;
             }
         }
 
         if (!success) {
-            throw new Error("Semua model AI gagal. Ralat: " + lastError);
+            throw new Error("Semua kombinasi API Key dan Model Gemini gagal. Ralat terakhir: " + lastError);
         }
         
-        // Bersihkan markdown jika AI degil
         text = text.replace(/```json|```/g, '').trim();
-        
-        // Hantar JSON ke HTML
         const signalData = JSON.parse(text);
-        
-        // Tambah info sesi pada jawapan
         signalData.session_active = session.name; 
         
         res.json(signalData);
