@@ -32,10 +32,10 @@ app.get('/api/generate-signal', async (req, res) => {
 
         let text = "";
 
-        // --- KAEDAH PALING ASAS: GUNA FETCH TERUS KE GOOGLE API V1 ---
+        // --- GUNA MODEL GEMINI TERBARU MELALUI v1beta ---
         try {
-            // 1. Cuba guna gemini-1.5-flash
-            const urlFlash = `https://generativelanguage.googleapis.com/v1/models/gemini-1.5-flash:generateContent?key=${process.env.GEMINI_API_KEY}`;
+            // 1. Cuba gemini-2.0-flash (Model paling baru)
+            const urlFlash = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${process.env.GEMINI_API_KEY}`;
             const resFlash = await fetch(urlFlash, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -43,25 +43,26 @@ app.get('/api/generate-signal', async (req, res) => {
             });
             const dataFlash = await resFlash.json();
             
-            if (dataFlash.error) throw new Error("Gagal 1.5-flash");
+            if (dataFlash.error) throw new Error("Gagal 2.0-flash");
             text = dataFlash.candidates[0].content.parts[0].text;
 
         } catch (err1) {
-            console.log("Gagal guna flash, cuba gemini-pro...");
-            // 2. Kalau gagal, cuba guna gemini-pro
-            const urlPro = `https://generativelanguage.googleapis.com/v1/models/gemini-pro:generateContent?key=${process.env.GEMINI_API_KEY}`;
-            const resPro = await fetch(urlPro, {
+            console.log("Gagal guna 2.0-flash, cuba 1.5-flash via v1beta...");
+            
+            // 2. Kalau 2.0-flash gagal, cuba 1.5-flash via v1beta
+            const urlFallback = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${process.env.GEMINI_API_KEY}`;
+            const resFallback = await fetch(urlFallback, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] })
             });
-            const dataPro = await resPro.json();
+            const dataFallback = await resFallback.json();
 
-            if (dataPro.error) {
-                // Kalau dua-dua fail, kita tunjuk error sebenar dari Google
-                throw new Error(JSON.stringify(dataPro.error)); 
+            if (dataFallback.error) {
+                // Tunjuk error sebenar jika kedua-duanya gagal
+                throw new Error(JSON.stringify(dataFallback.error)); 
             }
-            text = dataPro.candidates[0].content.parts[0].text;
+            text = dataFallback.candidates[0].content.parts[0].text;
         }
 
         // Bersihkan markdown dan parse JSON
