@@ -12,23 +12,17 @@ const TD_KEYS = [
     process.env.TWELVEDATA_API_KEY_3
 ].filter(Boolean);
 
-// 2. API Key Gemini
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY; 
 
-// 3. Mapping Sesi Pasaran
+// 2. Mapping Sesi Pasaran
 function getActiveSession() {
     const now = new Date();
     const mytHour = parseInt(now.toLocaleString("en-US", { timeZone: "Asia/Kuala_Lumpur", hour: '2-digit', hour12: false }));
     
-    if (mytHour >= 7 && mytHour < 15) {
-        return { name: "ASIA", tp: 8, sl: 10, desc: "Volatility rendah." };
-    } else if (mytHour >= 15 && mytHour < 20) {
-        return { name: "LONDON", tp: 15, sl: 12, desc: "Volatility sederhana." };
-    } else if (mytHour >= 20 || mytHour < 2) {
-        return { name: "NEW YORK", tp: 25, sl: 18, desc: "Volatility tinggi." };
-    } else {
-        return { name: "OVERLAP / LATE NY", tp: 20, sl: 15, desc: "Bercampur." };
-    }
+    if (mytHour >= 7 && mytHour < 15) return { name: "ASIA", tp: 8, sl: 10 };
+    if (mytHour >= 15 && mytHour < 20) return { name: "LONDON", tp: 15, sl: 12 };
+    if (mytHour >= 20 || mytHour < 2) return { name: "NEW YORK", tp: 25, sl: 18 };
+    return { name: "OVERLAP", tp: 20, sl: 15 };
 }
 
 // Fungsi Ambil Data TwelveData
@@ -54,32 +48,51 @@ app.get('/api/generate-signal', async (req, res) => {
         
         const prompt = `
         Pair: XAU/USD. Current Price: ${m.latestPrice}. 
-        Recent History (Old to New): ${m.history.join(', ')}.
-        Current Market Session: ${session.name}.
-        
-        Analyze the trend. Reply ONLY JSON format:
-        {"pair":"XAU/USD","action":"BUY" or "SELL","entry":${m.latestPrice},"tp1":0,"stop_loss":0,"confidence":85,"reason":"Short reason here"}
-        
-        RULES:
-        - If action is BUY: tp1 must be roughly (Entry + ${session.tp}), stop_loss roughly (Entry - ${session.sl}).
-        - If action is SELL: tp1 must be roughly (Entry - ${session.tp}), stop_loss roughly (Entry + ${session.sl}).
+        History: ${m.history.join(', ')}.
+        Session: ${session.name}.
+        Reply ONLY JSON: {"pair":"XAU/USD","action":"BUY" or "SELL","entry":${m.latestPrice},"tp1":0,"stop_loss":0,"confidence":85,"reason":"Short reason"}
+        If BUY: tp1 roughly Entry+${session.tp}, sl roughly Entry-${session.sl}.
+        If SELL: tp1 roughly Entry-${session.tp}, sl roughly Entry+${session.sl}.
         `;
 
         let text = "";
         let success = false;
         let lastError = "";
 
-        // --- SENARAI MODEL GEMINI (Guna nama rasmi) ---
-        const GEMINI_MODELS = [
-            "gemini-1.5-flash",
-            "gemini-1.5-pro"
-        ];
+        // =====================================================================
+        // LANGKAH 1: TANYA GOOGLE MODEL APA YANG ADA
+        // =====================================================================
+        console.log("Menyemak senarai model yang tersedia untuk API Key anda...");
+        const listUrl = `https://generativelanguage.googleapis.com/v1beta/models?key=${GEMINI_API_KEY}`;
+        const listRes = await fetch(listUrl);
+        const listData = await listRes.json();
 
-        for (let modelName of GEMINI_MODELS) {
+        if (listData.error) {
+            throw new Error("Gagal dapatkan senarai model: " + listData.error.message);
+        }
+
+        // Cari model yang menyokong "generateContent"
+        const availableModels = listData.models
+            .filter(mod => mod.supportedGenerationMethods.includes("generateContent"))
+            .map(mod => mod.name.replace("models/", "")); // Buang perkataan 'models/'
+
+        console.log("Model yang dijumpai:", availableModels);
+
+        // Ambil model pertama yang ada (biasanya Gemini 1.5 Flash atau Pro)
+        if (availableModels.length === 0) {
+            throw new Error("Tiada model langsung yang boleh digunakan oleh API Key ini.");
+        }
+
+        // =====================================================================
+        // LANGKAH 2: GUNA MODEL YANG DIJUMPAI
+        // =====================================================================
+        // Cuba 3 model pertama dari senarai yang sah
+        const modelsToTry = availableModels.slice(0, 3); 
+
+        for (let modelName of modelsToTry) {
             try {
-                console.log(`Cuba guna model: ${modelName}...`);
+                console.log(`Cuba guna model yang SAH: ${modelName}...`);
                 
-                // Kita guna v1beta untuk pastikan ia jumpa model ni
                 const url = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${GEMINI_API_KEY}`;
                 
                 const response = await fetch(url, {
@@ -94,7 +107,6 @@ app.get('/api/generate-signal', async (req, res) => {
                 const data = await response.json();
 
                 if (data.error) {
-                    console.log(`Model ${modelName} gagal: ${data.error.message}`);
                     lastError = data.error.message;
                     continue; 
                 }
@@ -110,7 +122,7 @@ app.get('/api/generate-signal', async (req, res) => {
         }
 
         if (!success) {
-            throw new Error("Semua kombinasi gagal. Ralat terakhir: " + lastError);
+            throw new Error("Gagal guna semua model yang dijumpai. Ralat: " + lastError);
         }
         
         text = text.replace(/```json|```/g, '').trim();
@@ -120,6 +132,7 @@ app.get('/api/generate-signal', async (req, res) => {
         res.json(signalData);
 
     } catch (e) {
+        console.error(e.message);
         res.status(500).json({ error: e.message });
     }
 });
