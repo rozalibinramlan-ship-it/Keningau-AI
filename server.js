@@ -12,21 +12,22 @@ const TD_KEYS = [
     process.env.TWELVEDATA_API_KEY_3
 ].filter(Boolean);
 
-const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
+// 2. API Key Gemini
+const GEMINI_API_KEY = process.env.GEMINI_API_KEY; 
 
-// 2. Mapping Sesi Pasaran (Masa Malaysia - MYT)
+// 3. Mapping Sesi Pasaran
 function getActiveSession() {
     const now = new Date();
     const mytHour = parseInt(now.toLocaleString("en-US", { timeZone: "Asia/Kuala_Lumpur", hour: '2-digit', hour12: false }));
     
     if (mytHour >= 7 && mytHour < 15) {
-        return { name: "ASIA", tp: 8, sl: 10, desc: "Volatility rendah, sesuai untuk TP/SL kecil." };
+        return { name: "ASIA", tp: 8, sl: 10, desc: "Volatility rendah." };
     } else if (mytHour >= 15 && mytHour < 20) {
-        return { name: "LONDON", tp: 15, sl: 12, desc: "Volatility sederhana, breakout sering berlaku." };
+        return { name: "LONDON", tp: 15, sl: 12, desc: "Volatility sederhana." };
     } else if (mytHour >= 20 || mytHour < 2) {
-        return { name: "NEW YORK", tp: 25, sl: 18, desc: "Volatility tinggi, pergerakan dolar besar." };
+        return { name: "NEW YORK", tp: 25, sl: 18, desc: "Volatility tinggi." };
     } else {
-        return { name: "OVERLAP / LATE NY", tp: 20, sl: 15, desc: "Pergerakan bercampur." };
+        return { name: "OVERLAP / LATE NY", tp: 20, sl: 15, desc: "Bercampur." };
     }
 }
 
@@ -54,7 +55,7 @@ app.get('/api/generate-signal', async (req, res) => {
         const prompt = `
         Pair: XAU/USD. Current Price: ${m.latestPrice}. 
         Recent History (Old to New): ${m.history.join(', ')}.
-        Current Market Session: ${session.name} (${session.desc}).
+        Current Market Session: ${session.name}.
         
         Analyze the trend. Reply ONLY JSON format:
         {"pair":"XAU/USD","action":"BUY" or "SELL","entry":${m.latestPrice},"tp1":0,"stop_loss":0,"confidence":85,"reason":"Short reason here"}
@@ -68,18 +69,17 @@ app.get('/api/generate-signal', async (req, res) => {
         let success = false;
         let lastError = "";
 
-        // --- SENARAI MODEL GEMINI TERBARU ---
+        // --- SENARAI MODEL GEMINI (Guna nama rasmi) ---
         const GEMINI_MODELS = [
-            "gemini-2.0-flash",
-            "gemini-2.0-flash-lite",
-            "gemini-1.5-flash-8b"
+            "gemini-1.5-flash",
+            "gemini-1.5-pro"
         ];
 
         for (let modelName of GEMINI_MODELS) {
             try {
                 console.log(`Cuba guna model: ${modelName}...`);
                 
-                // Guna v1beta (kerana model 2.0-flash biasanya diletakkan di sini buat masa ini)
+                // Kita guna v1beta untuk pastikan ia jumpa model ni
                 const url = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${GEMINI_API_KEY}`;
                 
                 const response = await fetch(url, {
@@ -87,9 +87,7 @@ app.get('/api/generate-signal', async (req, res) => {
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
                         contents: [{ parts: [{ text: prompt }] }],
-                        generationConfig: {
-                            responseMimeType: "application/json"
-                        }
+                        generationConfig: { responseMimeType: "application/json" }
                     })
                 });
 
@@ -107,7 +105,6 @@ app.get('/api/generate-signal', async (req, res) => {
                 break; 
 
             } catch (err) {
-                console.log(`Ralat rangkaian pada model ${modelName}`);
                 lastError = err.message;
             }
         }
@@ -123,7 +120,6 @@ app.get('/api/generate-signal', async (req, res) => {
         res.json(signalData);
 
     } catch (e) {
-        console.error("Ralat Sistem:", e.message);
         res.status(500).json({ error: e.message });
     }
 });
