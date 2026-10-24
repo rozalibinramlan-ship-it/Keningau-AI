@@ -8,6 +8,24 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
+// --- TAMBAHAN: Fungsi Hantar Telegram ---
+async function sendTelegram(text) {
+    const token = process.env.TELEGRAM_BOT_TOKEN;
+    const chatId = process.env.TELEGRAM_CHAT_ID;
+    if (!token || !chatId) return; 
+
+    try {
+        await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ chat_id: chatId, text: text, parse_mode: 'HTML' })
+        });
+    } catch (e) {
+        console.log("Gagal hantar Telegram:", e.message);
+    }
+}
+// -----------------------------------------
+
 const TD_KEYS = [
     process.env.TWELVEDATA_API_KEY,
     process.env.TWELVEDATA_API_KEY_2,
@@ -19,7 +37,7 @@ const TF = { m5: { i: "5min", h: "1h" }, m15: { i: "15min", h: "1h" }, h1: { i: 
 const SESSION_RR = { "ASIA": 1, "LONDON": 1.5, "NEW YORK": 2, "OVERLAP": 1.5 };
 
 const NAMES = ["ASIA", "LONDON", "NEW YORK", "OVERLAP"];
-function parseRR(q) { // ?rr=1,1.5,2,1.5 ikut susunan NAMES
+function parseRR(q) { 
     const m = { ...SESSION_RR };
     if (q) String(q).split(',').forEach((v, i) => { const x = parseFloat(v); if (NAMES[i] && x >= 0.5 && x <= 5) m[NAMES[i]] = x; });
     return m;
@@ -38,13 +56,13 @@ const cache = {};
 async function getCandles(interval, n) {
     const ck = interval + ':' + n;
     const c = cache[ck];
-    if (c && Date.now() - c.t < 60000) return c.d; // cache 60s, jimat kuota
+    if (c && Date.now() - c.t < 60000) return c.d; 
     for (const key of TD_KEYS) {
         try {
             const r = await fetch(`https://api.twelvedata.com/time_series?symbol=XAU/USD&interval=${interval}&outputsize=${n}&apikey=${key}`);
             const d = await r.json();
             if (d.values) {
-                const cs = d.values.map(v => ({ o: +v.open, h: +v.high, l: +v.low, c: +v.close })).reverse(); // lama -> baru
+                const cs = d.values.map(v => ({ o: +v.open, h: +v.high, l: +v.low, c: +v.close })).reverse(); 
                 cache[ck] = { t: Date.now(), d: cs };
                 return cs;
             }
@@ -81,7 +99,7 @@ function swings(cs, k = 3) {
     }
     return { highs, lows };
 }
-function levels(sw, A) { // kluster level SNR
+function levels(sw, A) { 
     const all = [...sw.highs, ...sw.lows].map(x => x.p).sort((a, b) => a - b), cl = [];
     for (const p of all) {
         const g = cl[cl.length - 1];
@@ -89,13 +107,13 @@ function levels(sw, A) { // kluster level SNR
     }
     return cl.map(g => ({ p: g.sum / g.n, n: g.n }));
 }
-function zonesSND(cs, A) { // zon supply/demand dari candle impuls
+function zonesSND(cs, A) { 
     const z = [];
     for (let i = Math.max(1, cs.length - 120); i < cs.length - 1; i++) {
         const body = cs[i].c - cs[i].o;
         if (Math.abs(body) >= 1.5 * A) z.push({ t: body > 0 ? 'demand' : 'supply', lo: cs[i - 1].l, hi: cs[i - 1].h, i });
     }
-    return z.filter(q => !cs.slice(q.i + 1).some(x => q.t === 'demand' ? x.c < q.lo : x.c > q.hi)); // buang zon yang sudah pecah
+    return z.filter(q => !cs.slice(q.i + 1).some(x => q.t === 'demand' ? x.c < q.lo : x.c > q.hi)); 
 }
 const zdist = (z, price) => price > z.hi ? price - z.hi : price < z.lo ? z.lo - price : 0;
 
@@ -103,7 +121,7 @@ const zdist = (z, price) => price > z.hi ? price - z.hi : price < z.lo ? z.lo - 
 function analyze(cs, hcs, session) {
     const n = cs.length, c = cs.map(x => x.c), price = c[n - 1], A = atr(cs), R = rsi(c);
     const f = x => x.toFixed(2);
-    const E = []; // {n, v (+1/-1/0), note}
+    const E = []; 
 
     const e200 = n >= 200 ? ema(c, 200)[n - 1] : null;
     const sw = swings(cs), lv = levels(sw, A);
@@ -185,8 +203,9 @@ function analyze(cs, hcs, session) {
     const fails = checks.filter(k => !k.ok).length;
     const confidence = Math.max(30, Math.min(95, Math.round(40 + 60 * agree / E.length - 8 * fails)));
     const action = dir === 1 ? 'BUY' : 'SELL';
-    // TP untuk setiap sesi: entry dan SL sama, TP ikut risk:reward sesi
+    
     const mapping = NAMES.map(name => ({ name, rr: session.map[name], tp: +f(entry + dir * slDist * session.map[name]) }));
+    
     return {
         pair: 'XAU/USD', action, entry: +f(entry), tp1: +f(tp), stop_loss: +f(sl), confidence,
         status: fails === 0 ? 'SIAP' : 'TUNGGU', price: +f(price), atr: +f(A), htf_bias: hb === 1 ? 'bull' : 'bear',
@@ -196,23 +215,23 @@ function analyze(cs, hcs, session) {
     };
 }
 
-// Papar halaman app di alamat utama (index.html mesti sebelah server.js)
+// Papar halaman app di alamat utama
 app.get('/', (req, res) => res.sendFile(path.join(__dirname, 'index.html')));
 
-/* ---------- Signal sesi automatik (server jana sendiri, UptimeRobot kekalkan server hidup) ---------- */
+/* ---------- Signal sesi automatik ---------- */
 const STATE_FILE = path.join(os.tmpdir(), 'keningau_state.json');
 let ST = { cfg: { tf: 'm15', rr: { ...SESSION_RR }, auto: true }, sigs: [], tries: {} };
 try { const j = JSON.parse(fs.readFileSync(STATE_FILE, 'utf8')); ST = { ...ST, ...j, cfg: { ...ST.cfg, ...(j.cfg || {}) } }; } catch (e) {}
 const saveST = () => { try { fs.writeFileSync(STATE_FILE, JSON.stringify(ST)); } catch (e) {} };
 
-function sesKey() { // sesi semasa + kunci unik (nama:tarikh mula). Overlap tiada signal
+function sesKey() { 
     const d = new Date(Date.now() + 8 * 3600e3), h = d.getUTCHours();
     let name = null;
     if (h >= 7 && h < 15) name = "ASIA"; else if (h >= 15 && h < 20) name = "LONDON"; else if (h >= 20 || h < 2) name = "NEW YORK";
     if (!name) return null;
     return { name, key: name + ':' + new Date(d.getTime() - (h < 2 ? 864e5 : 0)).toISOString().slice(0, 10) };
 }
-function applyTick(s, hi, lo) { // sama seperti logik di app
+function applyTick(s, hi, lo) { 
     const buy = s.action === 'BUY', pp = x => Math.round(Math.abs(x - s.entry) * 10);
     if (s.state === 'menunggu') {
         if (buy ? lo <= s.entry : hi >= s.entry) s.state = 'masuk';
@@ -220,7 +239,7 @@ function applyTick(s, hi, lo) { // sama seperti logik di app
     }
     if (s.state === 'masuk') {
         const tp = buy ? hi >= s.tp1 : lo <= s.tp1, sl = buy ? lo <= s.stop_loss : hi >= s.stop_loss;
-        if (sl) { s.state = 'sl'; s.res = 'SL KENA'; s.pips = -pp(s.stop_loss); }   // TP dan SL dalam tempoh sama: kira SL
+        if (sl) { s.state = 'sl'; s.res = 'SL KENA'; s.pips = -pp(s.stop_loss); }   
         else if (tp) { s.state = 'tp'; s.res = 'TP KENA'; s.pips = pp(s.tp1); }
     }
 }
@@ -234,6 +253,18 @@ async function genSession() {
     const [cs, hcs] = await Promise.all([getCandles(TF[tf].i, 300), getCandles(TF[tf].h, 120)]);
     const sig = analyze(cs, hcs, { name: ses.name, rr: map[ses.name], map });
     const lim = Math.abs(sig.price - sig.entry) > 0.05;
+
+    // --- TAMBAHAN: HANTAR TELEGRAM ---
+    const msg = `🔥 <b>KENINGAU AI SIGNAL</b> 🔥\n` +
+                `📌 Pair: <b>${sig.pair}</b> (${ses.name} Session)\n` +
+                `📈 Aksi: <b>${sig.action}</b> (${sig.confidence}% Conf)\n` +
+                `🎯 Entry: <b>${sig.entry}</b>\n` +
+                `🛑 SL: <b>${sig.stop_loss}</b>\n` +
+                `✅ TP1: <b>${sig.tp1}</b>\n` +
+                `📝 Reason: <i>${sig.reason}</i>`;
+    sendTelegram(msg);
+    // ---------------------------------
+
     ST.sigs.unshift({ ...sig, sid: ses.key, session: ses.name, tf: tf.toUpperCase(), htf: sig.htf_bias, ts: Date.now(),
         state: lim ? 'menunggu' : 'masuk', mkt: !lim, lastCheck: Date.now(), srv: true });
     ST.sigs = ST.sigs.slice(0, 30); saveST();
@@ -247,7 +278,7 @@ async function checkSigs() {
         else if ((s.state === 'menunggu' && now - s.ts > 4 * 3600e3) || (s.state === 'masuk' && now - s.ts > 24 * 3600e3)) { s.state = 'tamat'; s.res = 'TAMAT MASA'; }
     }
     const live = act.filter(s => (s.state === 'menunggu' || s.state === 'masuk') && now - s.lastCheck >= 290000);
-    if (live.length) { // satu panggilan sahaja untuk semua signal aktif
+    if (live.length) { 
         const cs = await getCandles('5min', 12);
         for (const s of live) {
             const k = Math.min(cs.length, Math.ceil((now - s.lastCheck) / 300000) + 1), w = cs.slice(-k);
@@ -262,7 +293,7 @@ async function tick() {
     try { await genSession(); await checkSigs(); } catch (e) { console.log('tick:', e.message); } finally { ticking = false; }
 }
 app.get('/api/signals', (req, res) => { tick(); res.json({ signals: ST.sigs, session: (sesKey() || {}).name || 'OVERLAP', cfg: ST.cfg }); });
-app.post('/api/config', (req, res) => { // simpan setting dari app (tf, RR, auto)
+app.post('/api/config', (req, res) => { 
     const b = req.body || {};
     if (TF[b.tf]) ST.cfg.tf = b.tf;
     if (b.rr && typeof b.rr === 'object') NAMES.forEach(n => { const v = parseFloat(b.rr[n]); if (v >= 0.5 && v <= 5) ST.cfg.rr[n] = v; });
@@ -270,7 +301,7 @@ app.post('/api/config', (req, res) => { // simpan setting dari app (tf, RR, auto
     saveST(); res.json({ cfg: ST.cfg });
 });
 
-/* ---------- Berita ekonomi (Forex Factory, minggu ini) ---------- */
+/* ---------- Berita ekonomi ---------- */
 const NEWS_URLS = ['https://nfs.faireconomy.media/ff_calendar_thisweek.json', 'https://cdn-nfs.faireconomy.media/ff_calendar_thisweek.json'];
 let newsCache = { t: 0, d: null };
 function normNews(list) {
@@ -280,7 +311,7 @@ function normNews(list) {
 }
 app.get('/api/news', async (req, res) => {
     try {
-        if (newsCache.d && Date.now() - newsCache.t < 30 * 60000) return res.json({ events: newsCache.d }); // cache 30 minit
+        if (newsCache.d && Date.now() - newsCache.t < 30 * 60000) return res.json({ events: newsCache.d }); 
         let list = null, err = '';
         for (const u of NEWS_URLS) {
             try {
@@ -290,7 +321,7 @@ app.get('/api/news', async (req, res) => {
             } catch (e) { err = e.message; }
         }
         if (!Array.isArray(list)) {
-            if (newsCache.d) return res.json({ events: newsCache.d, stale: true }); // guna data lama kalau sumber sekat
+            if (newsCache.d) return res.json({ events: newsCache.d, stale: true }); 
             throw new Error('Berita tak dapat dimuat (' + err + ')');
         }
         newsCache = { t: Date.now(), d: normNews(list) };
@@ -298,7 +329,6 @@ app.get('/api/news', async (req, res) => {
     } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-// Harga semasa dan high/low 12 candle M5 terakhir, untuk semak entry/TP/SL signal aktif
 app.get('/api/price', async (req, res) => {
     try {
         const cs = await getCandles('5min', 12);
@@ -306,7 +336,7 @@ app.get('/api/price', async (req, res) => {
     } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-app.get('/health', (req, res) => { tick(); res.status(200).send('OK'); }); // UptimeRobot ping juga mencetus semakan
+app.get('/health', (req, res) => { tick(); res.status(200).send('OK'); }); 
 
 app.get('/api/generate-signal', async (req, res) => {
     try {
