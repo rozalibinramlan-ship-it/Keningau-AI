@@ -63,6 +63,34 @@ tr.now td{color:var(--ac);font-weight:700}
 .chips{display:flex;gap:8px;overflow-x:auto;margin:14px 0 10px;padding-bottom:4px}
 .chip{flex:none;background:var(--card);border:1px solid var(--bd);color:var(--mut);border-radius:20px;padding:7px 13px;font-size:13px;cursor:pointer}
 .chip.on{color:var(--ac);border-color:var(--ac)}
+.imp{display:inline-block;width:9px;height:9px;border-radius:50%;margin-right:8px;flex:none}
+.imp.high{background:#ff4d4d}.imp.medium{background:#ffd33d}.imp.low{background:#fff}
+.nrow{display:flex;align-items:center;padding:9px 0;border-top:1px solid var(--bd);font-size:14px;gap:4px}
+.nrow .t{width:76px;color:var(--mut);font-size:12px;flex:none}
+.nrow .c{width:40px;font-weight:700;font-size:12px;flex:none}
+.nrow small{display:block;color:var(--mut);font-size:11px}
+@keyframes blink{0%,100%{opacity:1}50%{opacity:.2}}
+.nrow .ttl,.nrow .t,.nrow .c{font-weight:700}
+.nrow.high .ttl,.nrow.high .t,.nrow.high .c{color:#ff4d4d}
+.nrow.high .ttl,.nrow.high .t{animation:blink 1s ease-in-out infinite}
+.nrow.medium .ttl,.nrow.medium .t,.nrow.medium .c{color:#ffd33d}
+.nrow.low .ttl,.nrow.low .t,.nrow.low .c{color:#fff}
+.nrow.past{opacity:.6}
+.nrow.past .ttl,.nrow.past .t{animation:none!important}
+.hrow{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:10px 0;border-top:1px solid var(--bd);font-size:13px}
+.hrow small{display:block;color:var(--mut);font-size:11px;margin-top:2px}
+.hrow b.BUY{color:var(--buy)}.hrow b.SELL{color:var(--sell)}
+.res{font-weight:700;text-align:right;font-size:12px;flex:none}
+.res.tp{color:var(--buy)}.res.sl{color:var(--sell)}.res.lepas,.res.tamat{color:var(--mut)}
+@media (prefers-reduced-motion:reduce){.nrow.high .ttl,.nrow.high .t{animation:none}}
+.nday{margin:14px 0 2px;font-size:12px;color:var(--ac)}
+.nnext{background:#0d1317;border:1px solid var(--bd);border-radius:12px;padding:12px;font-size:14px;line-height:1.5}
+.nnext b{color:var(--sell)}
+.slot{padding:12px 0;border-top:1px solid var(--bd)}
+.slot:first-child{border-top:0;padding-top:0}
+.slot .sh{display:flex;justify-content:space-between;align-items:center;margin-bottom:6px}
+.slot.cur .sh b{color:var(--ac)}.slot .sh small{color:var(--mut);margin-left:6px}
+.slot .btn{padding:12px;font-size:15px}
 nav{position:fixed;left:0;right:0;bottom:0;background:rgba(10,14,17,.96);border-top:1px solid var(--bd);display:flex;justify-content:center;padding-bottom:env(safe-area-inset-bottom);backdrop-filter:blur(8px)}
 nav div{display:flex;width:100%;max-width:440px}
 nav button{flex:1;background:none;border:0;color:var(--mut);padding:10px 0 12px;font-size:11px;cursor:pointer;display:flex;flex-direction:column;align-items:center;gap:4px}
@@ -79,8 +107,9 @@ nav button:focus-visible,.btn:focus-visible{outline:2px solid var(--ac);outline-
     <h1 class="brand">Keningau<b>AI</b></h1>
     <p class="sub">Signal XAU/USD · TwelveData</p>
     <div class="card"><h3>Sesi pasaran (waktu Malaysia)</h3><div id="sessions"></div></div>
+    <div class="card"><h3>Berita kuat USD hari ini</h3><div id="homeNews"><div class="empty">Memuatkan...</div></div></div>
     <div class="card">
-      <h3>Signal terakhir</h3>
+      <h3>Signal mapping sesi hari ini</h3>
       <div id="lastSignal"><div class="empty">Belum ada signal. Tekan butang di bawah.</div></div>
     </div>
     <select class="tf" aria-label="Timeframe"><option value="m5">M5</option><option value="m15">M15</option><option value="h1">H1</option><option value="h4">H4</option></select>
@@ -108,10 +137,16 @@ nav button:focus-visible,.btn:focus-visible{outline:2px solid var(--ac);outline-
   <section class="view" id="v-tools">
     <h1 class="brand">AI Tools</h1>
     <p class="sub">Alat tambahan akan masuk di sini.</p>
+    <div class="card">
+      <h3>Berita ekonomi (waktu Malaysia)</h3>
+      <div id="newsNext"></div>
+      <div class="chips" id="newsChips"></div>
+      <div id="newsList"><div class="empty">Memuatkan...</div></div>
+      <div class="time" id="newsMeta"></div>
+    </div>
     <div class="tools">
       <div class="tool"><b>Analisis pasaran</b><span>Ringkasan trend XAU/USD. Akan datang.</span></div>
       <div class="tool"><b>Tutor AI</b><span>Tanya soalan trading. Akan datang.</span></div>
-      <div class="tool"><b>Berita pasaran</b><span>Berita yang gerakkan emas. Akan datang.</span></div>
       <div class="tool"><b>Simulator</b><span>Latihan dengan wang maya. Akan datang.</span></div>
     </div>
   </section>
@@ -148,6 +183,7 @@ nav button:focus-visible,.btn:focus-visible{outline:2px solid var(--ac);outline-
       <div class="kv"><span>RR sesi London (1 : )</span><input class="inp" type="number" step="0.1" min="0.5" max="5" data-rr="LONDON"></div>
       <div class="kv"><span>RR sesi New York (1 : )</span><input class="inp" type="number" step="0.1" min="0.5" max="5" data-rr="NEW YORK"></div>
       <div class="kv"><span>RR sesi Overlap (1 : )</span><input class="inp" type="number" step="0.1" min="0.5" max="5" data-rr="OVERLAP"></div>
+      <div class="kv"><span>Jana signal automatik setiap sesi</span><input type="checkbox" id="setAuto" style="width:22px;height:22px;accent-color:var(--ac)"></div>
       <button class="btn" id="saveSet" style="margin-top:12px">Simpan setting</button>
       <div class="time" id="setMsg" style="text-align:center"></div>
     </div>
@@ -155,6 +191,7 @@ nav button:focus-visible,.btn:focus-visible{outline:2px solid var(--ac);outline-
       <h3>Statistik</h3>
       <div class="kv" style="border-top:0"><span>Signal dijana</span><b id="stCount">0</b></div>
       <div class="kv"><span>Signal BUY / SELL</span><b id="stSplit">0 / 0</b></div>
+      <div class="kv"><span>TP kena / SL kena</span><b id="stRes">0 / 0</b></div>
     </div>
     <button class="btn ghost" id="clear">Padam sejarah signal</button>
     <p class="time" style="text-align:center;margin-top:18px">Signal dijana AI dan bukan nasihat pelaburan. Uji di akaun demo dahulu.</p>
@@ -248,13 +285,14 @@ function allText(s){
 function sigCard(s, idx = 0){
   const p = x => Math.round(Math.abs(x - s.entry)*10);
   const ok = valid(s), lim = s.price && Math.abs(s.price - s.entry) > 0.05;
+  const nw = isActive(s) && NEWS.find(e=>e.impact==='high' && e.cur==='USD' && Math.abs(e.ts-Date.now()) <= 30*60000);
   const cp = (v) => `<button class="cp" data-v="${v}">Salin</button>`;
   const nb = v => `<button class="cp" data-v="${v}" style="margin:0">${v}</button>`;
   const ent = (s.entries||[]).map(x=>`<tr class="${x.near?'now':''}"><td>${x.label}${x.near?'':' <small>('+x.dist+' pips)</small>'}</td><td>${nb(x.entry)}</td><td>${nb(x.sl)}</td><td>${nb(x.tp)}</td></tr>`).join('');
   const plan = (s.mapping||[]).map(m=>`<tr class="${m.name===s.session?'now':''}"><td>${m.name}</td><td>1 : ${m.rr}</td><td><button class="cp" data-v="${m.tp}" style="margin:0">${m.tp}</button></td><td>+${p(m.tp)}</td></tr>`).join('');
   return `<div class="card">
     <div class="sig-h"><h3>${s.pair}</h3><span class="badge ${s.action}">${s.action}${lim?' LIMIT':''}</span></div>
-    <div class="tags"><span class="tag">${s.tf||'H1'}</span>${s.status?`<span class="tag ${s.status==='SIAP'?'go':'wait'}">${s.status==='SIAP'?'Siap entry':'Tunggu syarat'}</span>`:''}<span class="tag ses">Sesi ${s.session}</span>${ok?'':'<span class="tag bad">TP/SL tidak sah, jangan guna</span>'}</div>
+    <div class="tags"><span class="tag">${s.tf||'H1'}</span>${s.status?`<span class="tag ${s.status==='SIAP'?'go':'wait'}">${s.status==='SIAP'?'Siap entry':'Tunggu syarat'}</span>`:''}${stTag(s)}<span class="tag ses">Sesi ${s.session}</span>${ok?'':'<span class="tag bad">TP/SL tidak sah, jangan guna</span>'}${nw?`<span class="tag bad">Berita kuat ${nw.title} ${tm(nw.ts)}</span>`:''}</div>
     <div class="kv"><span>${lim?'Entry (pasang limit)':'Entry'}</span><span><b>${s.entry}</b>${cp(s.entry)}</span></div>
     ${lim?`<div class="kv"><span>Harga semasa</span><b>${s.price}</b></div>`:''}
     <div class="kv"><span>Stop loss <small class="sl">-${p(s.stop_loss)} pips</small></span><span><b class="sl">${s.stop_loss}</b>${cp(s.stop_loss)}</span></div>
@@ -299,20 +337,35 @@ function renderEngines(){
     <div class="time">${fmtT(s.ts)}</div>`;
 }
 function renderAll(){
+  expireOld();
   renderSessions();
-  document.getElementById('lastSignal').innerHTML = history.length ? sigCard(history[0]).replace('class="card"','') : '<div class="empty">Belum ada signal. Tekan butang di bawah.</div>';
+  renderSlots();
   renderChips();
-  const list = history.map((s,i)=>({s,i})).filter(x=>filt==='ALL'||x.s.session===filt);
-  document.getElementById('history').innerHTML = list.length ? list.map(x=>sigCard(x.s,x.i)).join('') : '<div class="card"><div class="empty">'+(history.length?'Tiada signal untuk sesi ini.':'Sejarah kosong. Jana signal pertama anda.')+'</div></div>';
+  const inF = s => filt==='ALL' || s.session===filt;
+  const act = history.map((s,i)=>({s,i})).filter(x=>isActive(x.s) && inF(x.s));
+  const done = history.map((s,i)=>({s,i})).filter(x=>!isActive(x.s) && inF(x.s));
+  const hrow = s => `<div class="hrow"><div><b class="${s.action}">${s.action}</b> ${s.tf||''} · ${s.session}<small>Entry ${s.entry} · SL ${s.stop_loss} · TP ${s.tp1} · ${fmtT(s.ts)}</small></div><span class="res ${s.state}">${s.res||''}${s.pips?`<br>${s.pips>0?'+':''}${s.pips} pips`:''}</span></div>`;
+  document.getElementById('history').innerHTML =
+    (act.length ? act.map(x=>sigCard(x.s,x.i)).join('') : '<div class="card"><div class="empty">'+(history.length?'Tiada signal aktif.':'Sejarah kosong. Jana signal pertama anda.')+'</div></div>')
+    + (done.length ? `<div class="card"><h3>Sejarah (selesai atau entry sudah lepas)</h3>${done.map(x=>hrow(x.s)).join('')}</div>` : '');
   renderEngines();
   document.getElementById('stCount').innerText = history.length;
   const b = history.filter(s=>s.action==='BUY').length;
   document.getElementById('stSplit').innerText = b+' / '+(history.length-b);
+  document.getElementById('stRes').innerText = history.filter(s=>s.state==='tp').length+' / '+history.filter(s=>s.state==='sl').length;
 }
 
 /* Jana signal */
 async function generate(){
+  if(genBusy) return;
   const btns = document.querySelectorAll('.gen'), msgs = document.querySelectorAll('.msg'), errs = document.querySelectorAll('.err');
+  // Satu signal sahaja setiap sesi: kalau yang ada sudah tersentuh, jangan jana lagi (jimat kuota, elak kejar harga)
+  const ex = history.find(x=>x.session===curSes() && inCurSes(x));
+  if(ex && (ex.srv || !(ex.state==='menunggu' || (ex.state==='masuk' && ex.mkt && Date.now()-ex.ts < 15*60000)))){
+    errs.forEach(x=>{ x.style.display='block'; x.innerText = ex.srv ? 'Signal sesi '+curSes()+' sudah dijana oleh server. Lihat di Home.' : 'Signal sesi '+curSes()+' sudah ada dan sudah tersentuh. Tunggu sesi seterusnya supaya tak kejar harga.'; });
+    return;
+  }
+  genBusy = true;
   btns.forEach(b=>{b.disabled=true;b.innerText='Sedang jana...';});
   msgs.forEach(m=>{m.style.display='block';m.innerText='AI sedang menganalisis pasaran. Render mungkin ambil 30 saat kalau baru bangun.';});
   errs.forEach(e=>e.style.display='none');
@@ -321,15 +374,17 @@ async function generate(){
     const r = await fetch(API_URL + '?tf=' + document.querySelector('.tf').value + '&rr=' + MAP.map(m=>m.rr).join(','), {signal: ctl.signal});
     const d = await r.json();
     if(!r.ok || d.error) throw new Error(d.error || 'API gagal');
-    history.unshift({pair:d.pair, action:d.action, entry:+d.entry, tp1:+d.tp1, stop_loss:+d.stop_loss,
+    history = history.filter(x=>!(x.session===(d.session_active||'') && inCurSes(x)));   // ganti signal sesi yang sama
+    history.unshift(initSig({pair:d.pair, action:d.action, entry:+d.entry, tp1:+d.tp1, stop_loss:+d.stop_loss,
       confidence:+d.confidence, reason:d.reason, session:d.session_active || 'UNKNOWN', ts:Date.now(),
-      tf:d.tf, price:d.price, mapping:d.mapping||[], entries:d.entries||[], status:d.status, htf:d.htf_bias, atr:d.atr, engines:d.engines||[], checks:d.checks||[]});
+      tf:d.tf, price:d.price, mapping:d.mapping||[], entries:d.entries||[], status:d.status, htf:d.htf_bias, atr:d.atr, engines:d.engines||[], checks:d.checks||[]}));
     save(history); renderAll();
   }catch(e){
     errs.forEach(x=>{x.style.display='block';x.innerText='Ralat: '+(e.name==='AbortError'?'Server terlalu lama membalas. Cuba lagi.':e.message);});
   }finally{
     clearTimeout(to);
-    btns.forEach(b=>{b.disabled=false;b.innerText='Jana signal AI';});
+    genBusy = false;
+    btns.forEach(b=>{b.disabled=false;b.innerText=b.dataset.label||'Jana signal AI';});
     msgs.forEach(m=>m.style.display='none');
   }
 }
@@ -344,20 +399,174 @@ document.querySelectorAll('.gen').forEach(b=>b.addEventListener('click',generate
 document.getElementById('clear').addEventListener('click',()=>{ if(confirm('Padam semua sejarah signal?')){ history=[]; save(history); renderAll(); } });
 
 document.querySelectorAll('.tf').forEach(t=>t.addEventListener('change',()=>document.querySelectorAll('.tf').forEach(x=>x.value=t.value)));
+/* Signal mapping sesi di Home: satu signal untuk Asia, London dan New York. Hilang bila harga sentuh entry (elak FOMO) */
+const SLOTS = [{n:'ASIA', w:'7AM–3PM'}, {n:'LONDON', w:'3PM–8PM'}, {n:'NEW YORK', w:'8PM–2AM'}];
+function slotSignal(n){
+  const s = history.find(x=>x.session===n && inCurSes(x));
+  if(!s) return null;
+  const fresh = s.state==='menunggu' || (s.state==='masuk' && s.mkt && Date.now()-s.ts < 15*60000);
+  return {s, fresh};
+}
+const autoOn = () => SET.auto !== false;
+const autoTries = {};
+const trKey = n => n + ':' + new Date(Date.now() + 8*3600e3).toISOString().slice(0,10);
+const tries = n => autoTries[trKey(n)] || 0;
+let nextAuto = 0, genBusy = false, serverOK = false, syncDone = false;
+const SIG_URL = API_URL.replace('/api/generate-signal', '/api/signals'), CFG_URL = API_URL.replace('/api/generate-signal', '/api/config');
+function renderSlots(){
+  const x = SLOTS.find(z=>z.n===curSes()), box = document.getElementById('lastSignal');
+  if(!x){ box.innerHTML = '<div class="shut" style="font-size:13px">Tiada sesi signal sekarang (Overlap 2AM–7AM). Sesi Asia mula pukul 7AM.</div>'; return; }
+  const r = slotSignal(x.n), nb = v => `<button class="cp" data-v="${v}">Salin</button>`;
+  let body;
+  if(!r) body = serverOK
+    ? `<div class="shut" style="font-size:13px">Server sedang menyediakan signal ${x.n}. Kalau lambat, tekan jana.</div><button class="btn gen gen2" data-label="Jana signal ${x.n}" style="margin-top:8px">Jana signal ${x.n}</button>`
+    : (autoOn() && tries(x.n) < 3)
+    ? `<div class="shut" style="font-size:13px">Mendapatkan signal ${x.n} secara automatik...</div>`
+    : `<button class="btn gen gen2" data-label="Jana signal ${x.n}">Jana signal ${x.n}</button>`;
+  else if(!r.fresh) body = '<div class="shut" style="font-size:13px">Harga sudah sentuh entry sesi ini. Tunggu sesi seterusnya, jangan kejar.</div>';
+  else {
+    const s = r.s, lim = !s.mkt, p = v => Math.round(Math.abs(v - s.entry)*10);
+    body = `<div class="tags" style="margin:0 0 4px"><span class="badge ${s.action}">${s.action}${lim?' LIMIT':''}</span><span class="tag">${s.tf||''}</span>${s.status?`<span class="tag ${s.status==='SIAP'?'go':'wait'}">${s.status==='SIAP'?'Siap entry':'Tunggu syarat'}</span>`:''}</div>
+      <div class="kv"><span>Entry</span><span><b>${s.entry}</b>${nb(s.entry)}</span></div>
+      <div class="kv"><span>Stop loss <small class="sl">-${p(s.stop_loss)} pips</small></span><span><b class="sl">${s.stop_loss}</b>${nb(s.stop_loss)}</span></div>
+      <div class="kv"><span>Take profit <small class="tp">+${p(s.tp1)} pips</small></span><span><b class="tp">${s.tp1}</b>${nb(s.tp1)}</span></div>
+      <div class="time">${lim?'Hilang bila harga sentuh entry.':'Entry harga semasa, hilang dalam 15 minit.'}</div>`;
+  }
+  box.innerHTML = `<div class="slot cur"><div class="sh"><span><b>${x.n}</b><small>${x.w}</small></span></div>${body}</div>`;
+}
+// Jana sendiri sekali setiap sesi bila app dibuka (maksimum 3 cubaan, jarak 5 minit)
+function autoGen(){
+  const x = SLOTS.find(z=>z.n===curSes());
+  if(!syncDone || serverOK || !x || !autoOn() || document.hidden || genBusy || Date.now() < nextAuto || slotSignal(x.n) || tries(x.n) >= 3) return;
+  autoTries[trKey(x.n)] = tries(x.n) + 1; nextAuto = Date.now() + 300000;
+  generate();
+}
+document.addEventListener('click', e => { if(e.target.closest('.gen2')) generate(); });
+
+/* Semak signal aktif: limit terisi, entry lepas, TP/SL kena */
+const PRICE_URL = API_URL.replace('/api/generate-signal', '/api/price');
+function curSes(){ return mapSession(myt(Date.now()).getUTCHours()).name; }
+function inCurSes(s){ return s.session===curSes() && Date.now()-s.ts < 12*3600e3; }
+function isActive(s){ return s.state==='menunggu' || s.state==='masuk'; }
+function stTag(s){ return s.state==='menunggu' ? '<span class="tag wait">Limit belum terisi</span>' : s.state==='masuk' ? '<span class="tag go">Entry masuk</span>' + (inCurSes(s) ? '' : '<span class="tag">Sesi sudah lepas, trade masih jalan</span>') : ''; }
+function initSig(o){ o.state = (o.price && Math.abs(o.price - o.entry) > 0.05) ? 'menunggu' : 'masuk'; o.mkt = o.state==='masuk'; o.lastCheck = Date.now(); return o; }
+history.forEach(s=>{ if(!s.state){ s.state = 'tamat'; s.res = 'REKOD LAMA'; } });
+function expireOld(){
+  const n = Date.now(); let ch = false;
+  history.forEach(s=>{
+    if(s.state==='menunggu' && !inCurSes(s)){ s.state = 'tamat'; s.res = 'SESI TAMAT'; ch = true; }   // limit belum terisi, sesi sudah lepas
+    else if((s.state==='menunggu' && n-s.ts > 4*3600e3) || (s.state==='masuk' && n-s.ts > 24*3600e3)){ s.state = 'tamat'; s.res = 'TAMAT MASA'; ch = true; }
+  });
+  if(ch) save(history);
+}
+function applyTick(s, hi, lo){
+  const buy = s.action==='BUY', pp = x => Math.round(Math.abs(x - s.entry)*10);
+  if(s.state==='menunggu'){
+    if(buy ? lo <= s.entry : hi >= s.entry) s.state = 'masuk';
+    else if(buy ? hi >= s.tp1 : lo <= s.tp1){ s.state = 'lepas'; s.res = 'ENTRY LEPAS'; return; }
+  }
+  if(s.state==='masuk'){
+    const tp = buy ? hi >= s.tp1 : lo <= s.tp1, sl = buy ? lo <= s.stop_loss : hi >= s.stop_loss;
+    if(sl){ s.state = 'sl'; s.res = 'SL KENA'; s.pips = -pp(s.stop_loss); }   // jika TP dan SL dalam tempoh sama, kira SL
+    else if(tp){ s.state = 'tp'; s.res = 'TP KENA'; s.pips = pp(s.tp1); }
+  }
+}
+async function pollPrice(){
+  if(document.hidden || !history.some(s=>isActive(s) && !s.srv)) return;
+  try{
+    const r = await fetch(PRICE_URL), d = await r.json();
+    if(!r.ok || d.error) return;
+    const now = Date.now();
+    history.forEach(s=>{
+      if(!isActive(s) || s.srv) return;
+      const k = Math.min(d.candles.length, Math.ceil((now - (s.lastCheck || s.ts))/300000) + 1);
+      const w = d.candles.slice(-k);
+      s.lastCheck = now;
+      applyTick(s, Math.max(...w.map(x=>x.h)), Math.min(...w.map(x=>x.l)));
+    });
+    save(history); renderAll();
+  }catch(e){}
+}
+setInterval(pollPrice, 300000);
+document.addEventListener('visibilitychange', () => { if(!document.hidden){ syncServer(); pollPrice(); autoGen(); } });
+
+/* Berita ekonomi */
+const NEWS_URL = API_URL.replace('/api/generate-signal', '/api/news');
+let NEWS = [], nf = {imp:'all', cur:'USD'};
+const tm = ts => new Date(ts).toLocaleTimeString('en-GB',{hour:'numeric',minute:'2-digit',hour12:true,timeZone:'Asia/Kuala_Lumpur'});
+const dayLbl = ts => new Date(ts).toLocaleDateString('en-GB',{weekday:'long',day:'numeric',month:'short',timeZone:'Asia/Kuala_Lumpur'});
+async function loadNews(){
+  const meta = document.getElementById('newsMeta');
+  try{
+    const r = await fetch(NEWS_URL), d = await r.json();
+    if(!r.ok || d.error) throw new Error(d.error || 'gagal');
+    NEWS = d.events;
+    meta.innerText = 'Sumber: Forex Factory, minggu ini. Dikemas kini ' + tm(Date.now()) + (d.stale ? ' (data lama)' : '') + '.';
+  }catch(e){ meta.innerText = 'Berita gagal dimuat: ' + e.message; }
+  renderNews(); renderAll();
+}
+function renderNews(){
+  const now = Date.now();
+  const hs = NEWS.filter(e=>e.impact==='high' && e.cur==='USD' && e.ts>now).slice(0,3);
+  const dk = ms => new Date(ms + 8*3600e3).toISOString().slice(0,10);   // tarikh waktu Malaysia
+  const td = NEWS.filter(e=>e.impact==='high' && e.cur==='USD' && dk(e.ts)===dk(now) && e.ts > now - 4*3600e3);
+  document.getElementById('homeNews').innerHTML = !NEWS.length ? '<div class="empty">Tiada data berita.</div>' :
+    td.length ? td.map(e=>`<div class="nrow high${e.ts<now?' past':''}" style="border-top:0"><span class="imp high"></span><span class="t">${tm(e.ts)}</span><span class="c">${e.cur}</span><span class="ttl" style="flex:1">${e.title}</span><span style="font-size:12px;color:var(--mut)">${e.ts<now?'lepas '+dur(now-e.ts):dur(e.ts-now)}</span></div>`).join('')
+    : '<div class="empty" style="padding:8px 0">Tiada berita kuat USD hari ini.</div>';
+  document.getElementById('newsNext').innerHTML = hs.length ? `<div class="nnext">Berita kuat USD seterusnya: <b>${hs[0].title}</b> pukul ${tm(hs[0].ts)} (dalam ${dur(hs[0].ts-now)}). Elak buka entry baru 30 minit sebelum dan selepas.</div>` : '';
+  const L = {all:'Semua', high:'Kuat', medium:'Sederhana', low:'Kecil'};
+  document.getElementById('newsChips').innerHTML = Object.keys(L).map(k=>`<button class="chip ${nf.imp===k?'on':''}" data-n="imp:${k}">${L[k]}</button>`).join('')
+    + `<button class="chip ${nf.cur==='USD'?'on':''}" data-n="cur:${nf.cur==='USD'?'ALL':'USD'}">${nf.cur==='USD'?'USD sahaja':'Semua mata wang'}</button>`;
+  const list = NEWS.filter(e => e.ts > now - 4*3600e3 && (nf.imp==='all' || e.impact===nf.imp) && (nf.cur==='ALL' || e.cur===nf.cur));
+  let last = '';
+  document.getElementById('newsList').innerHTML = !NEWS.length ? '<div class="empty">Tiada data berita.</div>' : !list.length ? '<div class="empty">Tiada berita untuk tapisan ini.</div>' :
+    list.map(e=>{
+      const d = dayLbl(e.ts), head = d!==last ? `<div class="nday">${d}</div>` : ''; last = d;
+      const extra = (e.fc||e.pv) ? `<small>Ramalan ${e.fc||'-'} · Sebelum ${e.pv||'-'}</small>` : '';
+      return head + `<div class="nrow ${e.impact}${e.ts<now?' past':''}"><span class="imp ${e.impact}"></span><span class="t">${tm(e.ts)}</span><span class="c">${e.cur}</span><span class="ttl" style="flex:1">${e.title}${extra}${e.ts<now?`<small>Sudah lepas ${dur(now-e.ts)} lalu</small>`:''}</span></div>`;
+    }).join('');
+}
+document.getElementById('newsChips').addEventListener('click', e => {
+  const b = e.target.closest('.chip'); if(!b) return;
+  const [k, v] = b.dataset.n.split(':'); nf[k] = v; renderNews();
+});
+/* Segerak signal sesi yang dijana server (jalan walaupun app tak dibuka) */
+async function syncServer(){
+  try{
+    const r = await fetch(SIG_URL), d = await r.json();
+    if(!r.ok || !Array.isArray(d.signals)) throw new Error('x');
+    serverOK = true;
+    d.signals.slice().reverse().forEach(sv=>{
+      const ex = history.find(x=>x.sid===sv.sid);
+      if(ex && ex.ts===sv.ts) Object.assign(ex, {state:sv.state, res:sv.res, pips:sv.pips, lastCheck:sv.lastCheck});
+      else if(!ex && history.some(x=>x.session===sv.session && Math.abs(x.ts-sv.ts) < 12*3600e3)) return;   // sudah ada signal manual sesi ini
+      else { if(ex) history = history.filter(x=>x!==ex); history.push(sv); }
+    });
+    history.sort((a,b)=>b.ts-a.ts);
+    save(history); renderAll();
+  }catch(e){ serverOK = false; }
+  finally{ syncDone = true; }
+}
+loadNews(); pollPrice(); syncServer(); setInterval(loadNews, 300000); setInterval(syncServer, 60000); setInterval(renderNews, 30000);
+
 document.querySelectorAll('.tf').forEach(x=>x.value = SET.tf || 'm15');
 document.querySelectorAll('[data-rr]').forEach(i=>i.value = MAP.find(m=>m.name===i.dataset.rr).rr);
+document.getElementById('setAuto').checked = SET.auto !== false;
 document.getElementById('saveSet').addEventListener('click',()=>{
   const rr = {}; let bad = false;
   document.querySelectorAll('[data-rr]').forEach(i=>{ const v = parseFloat(i.value); if(!(v>=0.5 && v<=5)) bad = true; rr[i.dataset.rr] = v; });
   const msg = document.getElementById('setMsg');
   if(bad){ msg.style.color = 'var(--sell)'; msg.innerText = 'RR mesti antara 0.5 dan 5.'; return; }
   MAP.forEach(m=>m.rr = rr[m.name]);
-  SET = {tf: document.querySelector('.tf').value, rr};
+  SET = {tf: document.querySelector('.tf').value, rr, auto: document.getElementById('setAuto').checked};
   try{ localStorage.setItem(SKEY, JSON.stringify(SET)); }catch(e){}
+  fetch(CFG_URL, {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(SET)}).catch(()=>{});
   renderAll(); msg.style.color = 'var(--ac)'; msg.innerText = 'Setting disimpan. Berkuat kuasa pada signal seterusnya.';
 });
 renderAll();
-setInterval(renderSessions, 30000);
+autoGen();
+let lastSes = curSes();
+setInterval(()=>{ renderSessions(); renderSlots(); autoGen(); if(curSes()!==lastSes){ lastSes = curSes(); renderAll(); } }, 30000);
 </script>
 </body>
 </html>

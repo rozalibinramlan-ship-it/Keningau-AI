@@ -1,6 +1,8 @@
 const express = require('express');
 const cors = require('cors');
 const path = require('path');
+const os = require('os');
+const fs = require('fs');
 
 const app = express();
 app.use(cors());
@@ -34,7 +36,8 @@ function getActiveSession(map) {
 /* ---------- Data ---------- */
 const cache = {};
 async function getCandles(interval, n) {
-    const c = cache[interval];
+    const ck = interval + ':' + n;
+    const c = cache[ck];
     if (c && Date.now() - c.t < 60000) return c.d; // cache 60s, jimat kuota
     for (const key of TD_KEYS) {
         try {
@@ -42,7 +45,7 @@ async function getCandles(interval, n) {
             const d = await r.json();
             if (d.values) {
                 const cs = d.values.map(v => ({ o: +v.open, h: +v.high, l: +v.low, c: +v.close })).reverse(); // lama -> baru
-                cache[interval] = { t: Date.now(), d: cs };
+                cache[ck] = { t: Date.now(), d: cs };
                 return cs;
             }
         } catch (e) {}
@@ -196,7 +199,114 @@ function analyze(cs, hcs, session) {
 // Papar halaman app di alamat utama (index.html mesti sebelah server.js)
 app.get('/', (req, res) => res.sendFile(path.join(__dirname, 'index.html')));
 
-app.get('/health', (req, res) => res.status(200).send('OK'));
+/* ---------- Signal sesi automatik (server jana sendiri, UptimeRobot kekalkan server hidup) ---------- */
+const STATE_FILE = path.join(os.tmpdir(), 'keningau_state.json');
+let ST = { cfg: { tf: 'm15', rr: { ...SESSION_RR }, auto: true }, sigs: [], tries: {} };
+try { const j = JSON.parse(fs.readFileSync(STATE_FILE, 'utf8')); ST = { ...ST, ...j, cfg: { ...ST.cfg, ...(j.cfg || {}) } }; } catch (e) {}
+const saveST = () => { try { fs.writeFileSync(STATE_FILE, JSON.stringify(ST)); } catch (e) {} };
+
+function sesKey() { // sesi semasa + kunci unik (nama:tarikh mula). Overlap tiada signal
+    const d = new Date(Date.now() + 8 * 3600e3), h = d.getUTCHours();
+    let name = null;
+    if (h >= 7 && h < 15) name = "ASIA"; else if (h >= 15 && h < 20) name = "LONDON"; else if (h >= 20 || h < 2) name = "NEW YORK";
+    if (!name) return null;
+    return { name, key: name + ':' + new Date(d.getTime() - (h < 2 ? 864e5 : 0)).toISOString().slice(0, 10) };
+}
+function applyTick(s, hi, lo) { // sama seperti logik di app
+    const buy = s.action === 'BUY', pp = x => Math.round(Math.abs(x - s.entry) * 10);
+    if (s.state === 'menunggu') {
+        if (buy ? lo <= s.entry : hi >= s.entry) s.state = 'masuk';
+        else if (buy ? hi >= s.tp1 : lo <= s.tp1) { s.state = 'lepas'; s.res = 'ENTRY LEPAS'; return; }
+    }
+    if (s.state === 'masuk') {
+        const tp = buy ? hi >= s.tp1 : lo <= s.tp1, sl = buy ? lo <= s.stop_loss : hi >= s.stop_loss;
+        if (sl) { s.state = 'sl'; s.res = 'SL KENA'; s.pips = -pp(s.stop_loss); }   // TP dan SL dalam tempoh sama: kira SL
+        else if (tp) { s.state = 'tp'; s.res = 'TP KENA'; s.pips = pp(s.tp1); }
+    }
+}
+let nextTry = 0, ticking = false;
+async function genSession() {
+    const ses = sesKey();
+    if (!ses || ST.cfg.auto === false || ST.sigs.some(x => x.sid === ses.key)) return;
+    if ((ST.tries[ses.key] || 0) >= 3 || Date.now() < nextTry) return;
+    ST.tries[ses.key] = (ST.tries[ses.key] || 0) + 1; nextTry = Date.now() + 300000; saveST();
+    const tf = TF[ST.cfg.tf] ? ST.cfg.tf : 'm15', map = { ...SESSION_RR, ...ST.cfg.rr };
+    const [cs, hcs] = await Promise.all([getCandles(TF[tf].i, 300), getCandles(TF[tf].h, 120)]);
+    const sig = analyze(cs, hcs, { name: ses.name, rr: map[ses.name], map });
+    const lim = Math.abs(sig.price - sig.entry) > 0.05;
+    ST.sigs.unshift({ ...sig, sid: ses.key, session: ses.name, tf: tf.toUpperCase(), htf: sig.htf_bias, ts: Date.now(),
+        state: lim ? 'menunggu' : 'masuk', mkt: !lim, lastCheck: Date.now(), srv: true });
+    ST.sigs = ST.sigs.slice(0, 30); saveST();
+}
+async function checkSigs() {
+    const now = Date.now(), cur = sesKey();
+    const act = ST.sigs.filter(s => s.state === 'menunggu' || s.state === 'masuk');
+    if (!act.length) return;
+    for (const s of act) {
+        if (s.state === 'menunggu' && (!cur || cur.key !== s.sid)) { s.state = 'tamat'; s.res = 'SESI TAMAT'; }
+        else if ((s.state === 'menunggu' && now - s.ts > 4 * 3600e3) || (s.state === 'masuk' && now - s.ts > 24 * 3600e3)) { s.state = 'tamat'; s.res = 'TAMAT MASA'; }
+    }
+    const live = act.filter(s => (s.state === 'menunggu' || s.state === 'masuk') && now - s.lastCheck >= 290000);
+    if (live.length) { // satu panggilan sahaja untuk semua signal aktif
+        const cs = await getCandles('5min', 12);
+        for (const s of live) {
+            const k = Math.min(cs.length, Math.ceil((now - s.lastCheck) / 300000) + 1), w = cs.slice(-k);
+            s.lastCheck = now;
+            applyTick(s, Math.max(...w.map(x => x.h)), Math.min(...w.map(x => x.l)));
+        }
+    }
+    saveST();
+}
+async function tick() {
+    if (ticking) return; ticking = true;
+    try { await genSession(); await checkSigs(); } catch (e) { console.log('tick:', e.message); } finally { ticking = false; }
+}
+app.get('/api/signals', (req, res) => { tick(); res.json({ signals: ST.sigs, session: (sesKey() || {}).name || 'OVERLAP', cfg: ST.cfg }); });
+app.post('/api/config', (req, res) => { // simpan setting dari app (tf, RR, auto)
+    const b = req.body || {};
+    if (TF[b.tf]) ST.cfg.tf = b.tf;
+    if (b.rr && typeof b.rr === 'object') NAMES.forEach(n => { const v = parseFloat(b.rr[n]); if (v >= 0.5 && v <= 5) ST.cfg.rr[n] = v; });
+    if (typeof b.auto === 'boolean') ST.cfg.auto = b.auto;
+    saveST(); res.json({ cfg: ST.cfg });
+});
+
+/* ---------- Berita ekonomi (Forex Factory, minggu ini) ---------- */
+const NEWS_URLS = ['https://nfs.faireconomy.media/ff_calendar_thisweek.json', 'https://cdn-nfs.faireconomy.media/ff_calendar_thisweek.json'];
+let newsCache = { t: 0, d: null };
+function normNews(list) {
+    const ok = { high: 1, medium: 1, low: 1 };
+    return list.map(e => ({ title: e.title, cur: e.country, ts: new Date(e.date).getTime(), impact: String(e.impact).toLowerCase(), fc: e.forecast || '', pv: e.previous || '' }))
+        .filter(e => ok[e.impact] && !isNaN(e.ts)).sort((a, b) => a.ts - b.ts);
+}
+app.get('/api/news', async (req, res) => {
+    try {
+        if (newsCache.d && Date.now() - newsCache.t < 30 * 60000) return res.json({ events: newsCache.d }); // cache 30 minit
+        let list = null, err = '';
+        for (const u of NEWS_URLS) {
+            try {
+                const r = await fetch(u, { headers: { 'User-Agent': 'Mozilla/5.0 KeningauAI' } });
+                if (!r.ok) { err = 'HTTP ' + r.status; continue; }
+                list = await r.json(); break;
+            } catch (e) { err = e.message; }
+        }
+        if (!Array.isArray(list)) {
+            if (newsCache.d) return res.json({ events: newsCache.d, stale: true }); // guna data lama kalau sumber sekat
+            throw new Error('Berita tak dapat dimuat (' + err + ')');
+        }
+        newsCache = { t: Date.now(), d: normNews(list) };
+        res.json({ events: newsCache.d });
+    } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// Harga semasa dan high/low 12 candle M5 terakhir, untuk semak entry/TP/SL signal aktif
+app.get('/api/price', async (req, res) => {
+    try {
+        const cs = await getCandles('5min', 12);
+        res.json({ price: cs[cs.length - 1].c, candles: cs.slice(-12).map(x => ({ h: x.h, l: x.l })) });
+    } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+app.get('/health', (req, res) => { tick(); res.status(200).send('OK'); }); // UptimeRobot ping juga mencetus semakan
 
 app.get('/api/generate-signal', async (req, res) => {
     try {
@@ -214,8 +324,9 @@ app.get('/api/generate-signal', async (req, res) => {
     }
 });
 
-module.exports = { analyze };
+module.exports = { analyze, normNews, applyTick, _t: { ST, cache, genSession, checkSigs, sesKey } };
 if (require.main === module) {
+    setInterval(tick, 120000); setTimeout(tick, 5000);
     const PORT = process.env.PORT || 3000;
     app.listen(PORT, () => console.log("Server berjalan di port " + PORT));
 }
